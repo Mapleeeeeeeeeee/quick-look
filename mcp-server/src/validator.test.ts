@@ -104,15 +104,14 @@ describe('validateFile', () => {
 
   describe('size limit', () => {
     it('returns error for file larger than 10MB with size in message', async () => {
-      const sizeBytes = 20_000_000;
-      mockStat.mockResolvedValue(createMockStat({ size: sizeBytes }));
+      mockStat.mockResolvedValue(createMockStat({ size: 20_000_000 }));
 
       const result = await validateFile('/large/file.ts');
 
-      const expectedMB = (sizeBytes / 1_048_576).toFixed(1);
+      // 20_000_000 / 1_048_576 = 19.073... -> toFixed(1) = "19.1"
       expect(result).toEqual({
         valid: false,
-        errorMessage: `File too large for preview (${expectedMB}MB). Consider using line range.`,
+        errorMessage: 'File too large for preview (19.1MB). Consider using line range.',
       });
     });
   });
@@ -141,6 +140,20 @@ describe('validateFile', () => {
 
     it('detects .md as markdown', async () => {
       await assertFileType('README.md', 'markdown');
+    });
+
+    it('detects .mdx as markdown', async () => {
+      await assertFileType('doc.mdx', 'markdown');
+    });
+
+    it('detects uppercase .TS as code', async () => {
+      await assertFileType('index.TS', 'code');
+    });
+
+    it('detects unknown extension as unsupported', async () => {
+      mockStat.mockResolvedValue(createMockStat({ size: 100 }));
+      const result = await validateFile('/path/data.xyz');
+      expect(result).toMatchObject({ valid: true, fileType: 'unsupported' });
     });
 
     it('detects .png as image', async () => {
@@ -189,6 +202,13 @@ describe('validateFile', () => {
       const result = await validateFile('/path/file.ts');
 
       expect(result).toMatchObject({ valid: true, lineCount: 3 });
+    });
+
+    it('counts lines at exact 1MB boundary', async () => {
+      mockStat.mockResolvedValue(createMockStat({ size: 1_048_576 }));
+      (mockReadFile as any).mockResolvedValue('line1\nline2');
+      const result = await validateFile('/path/file.ts');
+      expect(result).toMatchObject({ valid: true, lineCount: 2 });
     });
 
     it('skips line count for code file >1MB', async () => {

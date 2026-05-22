@@ -1,184 +1,150 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-
-vi.mock('./validator.js', () => ({
-  validateFile: vi.fn(),
-}));
-
-vi.mock('./launcher.js', () => ({
-  resolveAppBinary: vi.fn(),
-  launchOrUpdate: vi.fn(),
-}));
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 vi.mock('node:fs/promises', () => ({
+  stat: vi.fn(),
+  readFile: vi.fn(),
   default: { access: vi.fn() },
   access: vi.fn(),
 }));
 
-import { validateFile } from './validator.js';
-import { resolveAppBinary, launchOrUpdate } from './launcher.js';
-import fs from 'node:fs/promises';
+vi.mock('node:child_process', () => ({
+  spawn: vi.fn(() => ({
+    unref: vi.fn(),
+  })),
+}));
+
+import fs, { stat, readFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import { createShowFileTool } from './tool.js';
 import { UserError } from 'fastmcp';
 
-const mockValidate = vi.mocked(validateFile);
-const mockResolve = vi.mocked(resolveAppBinary);
-const mockLaunch = vi.mocked(launchOrUpdate);
+const mockStat = vi.mocked(stat);
+const mockReadFile = vi.mocked(readFile);
 const mockFsAccess = vi.mocked(fs.access);
+const mockSpawn = vi.mocked(spawn);
 
 describe('show_file tool integration', () => {
   let execute: (args: { path: string; startLine?: number; endLine?: number }) => Promise<string>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('COPILOT_PREVIEW_BINARY', '/mock/binary');
+    mockFsAccess.mockResolvedValue(undefined);
+    mockSpawn.mockReturnValue({ unref: vi.fn() } as any);
     const tool = createShowFileTool();
     execute = tool.execute;
-    mockResolve.mockReturnValue('/path/to/binary');
-    mockFsAccess.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe('Journey 1: code file', () => {
-    it('spawns binary and returns success message with filename and line count', async () => {
-      mockValidate.mockResolvedValue({
-        valid: true,
-        absolutePath: '/proj/main.rs',
-        fileType: 'code',
-        lineCount: 245,
-        sizeBytes: 5000,
-      });
-      mockLaunch.mockResolvedValue(undefined);
+    it('spawns binary with file path and returns message with filename and line count', async () => {
+      mockStat.mockResolvedValue({ isDirectory: () => false, size: 5000 } as any);
+      mockReadFile.mockResolvedValue(Array(245).fill('x').join('\n') as any);
 
-      const result = await execute({ path: 'main.rs' });
+      const result = await execute({ path: '/proj/main.rs' });
 
-      expect(mockLaunch).toHaveBeenCalledWith('/proj/main.rs', undefined, undefined);
-      expect(result).toContain('main.rs');
-      expect(result).toContain('245 lines');
+      expect(mockSpawn).toHaveBeenCalledWith('/mock/binary', ['/proj/main.rs'], { detached: true, stdio: 'ignore' });
+      expect(result).toBe('Opened preview: main.rs (245 lines)');
     });
   });
 
   describe('Journey 2: line range', () => {
-    it('passes startLine and endLine to launcher and includes in message', async () => {
-      mockValidate.mockResolvedValue({
-        valid: true,
-        absolutePath: '/proj/utils.ts',
-        fileType: 'code',
-        lineCount: 200,
-        sizeBytes: 4000,
-      });
-      mockLaunch.mockResolvedValue(undefined);
+    it('passes start and end line flags to spawn and includes range in message', async () => {
+      mockStat.mockResolvedValue({ isDirectory: () => false, size: 4000 } as any);
+      mockReadFile.mockResolvedValue(Array(200).fill('x').join('\n') as any);
 
-      const result = await execute({ path: 'utils.ts', startLine: 50, endLine: 80 });
+      const result = await execute({ path: '/proj/utils.ts', startLine: 50, endLine: 80 });
 
-      expect(mockLaunch).toHaveBeenCalledWith('/proj/utils.ts', 50, 80);
-      expect(result).toContain('highlighting lines 50-80');
+      expect(mockSpawn).toHaveBeenCalledWith('/mock/binary', ['/proj/utils.ts', '--start-line', '50', '--end-line', '80'], { detached: true, stdio: 'ignore' });
+      expect(result).toBe('Opened preview: utils.ts (200 lines), highlighting lines 50-80');
     });
   });
 
   describe('Journey 3: consecutive calls', () => {
-    it('calls launcher twice with different paths', async () => {
-      mockValidate
-        .mockResolvedValueOnce({
-          valid: true,
-          absolutePath: '/proj/a.ts',
-          fileType: 'code',
-          lineCount: 100,
-          sizeBytes: 2000,
-        })
-        .mockResolvedValueOnce({
-          valid: true,
-          absolutePath: '/proj/b.ts',
-          fileType: 'code',
-          lineCount: 150,
-          sizeBytes: 3000,
-        });
-      mockLaunch.mockResolvedValue(undefined);
+    it('spawns with correct path for each call and returns correct messages', async () => {
+      mockStat
+        .mockResolvedValueOnce({ isDirectory: () => false, size: 2000 } as any)
+        .mockResolvedValueOnce({ isDirectory: () => false, size: 3000 } as any);
+      mockReadFile
+        .mockResolvedValueOnce(Array(100).fill('x').join('\n') as any)
+        .mockResolvedValueOnce(Array(150).fill('x').join('\n') as any);
 
-      await execute({ path: 'a.ts' });
-      await execute({ path: 'b.ts' });
+      const r1 = await execute({ path: '/proj/a.ts' });
+      const r2 = await execute({ path: '/proj/b.ts' });
 
-      expect(mockLaunch).toHaveBeenCalledTimes(2);
-      expect(mockLaunch).toHaveBeenNthCalledWith(1, '/proj/a.ts', undefined, undefined);
-      expect(mockLaunch).toHaveBeenNthCalledWith(2, '/proj/b.ts', undefined, undefined);
+      expect(r1).toContain('a.ts');
+      expect(r2).toContain('b.ts');
+      expect(mockSpawn).toHaveBeenCalledWith('/mock/binary', ['/proj/a.ts'], { detached: true, stdio: 'ignore' });
+      expect(mockSpawn).toHaveBeenCalledWith('/mock/binary', ['/proj/b.ts'], { detached: true, stdio: 'ignore' });
     });
   });
 
   describe('Journey 4: markdown file', () => {
-    it('returns markdown-specific message', async () => {
-      mockValidate.mockResolvedValue({
-        valid: true,
-        absolutePath: '/proj/README.md',
-        fileType: 'markdown',
-        lineCount: 80,
-        sizeBytes: 1500,
-      });
-      mockLaunch.mockResolvedValue(undefined);
+    it('returns markdown-specific message without line count', async () => {
+      mockStat.mockResolvedValue({ isDirectory: () => false, size: 1500 } as any);
+      mockReadFile.mockResolvedValue('# Title\n\nBody\n' as any);
 
-      const result = await execute({ path: 'README.md' });
+      const result = await execute({ path: '/proj/README.md' });
 
-      expect(result).toContain('markdown preview');
+      expect(result).toBe('Opened markdown preview: README.md');
     });
   });
 
   describe('Journey 5: image file', () => {
-    it('returns image-specific message', async () => {
-      mockValidate.mockResolvedValue({
-        valid: true,
-        absolutePath: '/proj/logo.png',
-        fileType: 'image',
-        lineCount: undefined,
-        sizeBytes: 20000,
-      });
-      mockLaunch.mockResolvedValue(undefined);
+    it('returns image-specific message without reading file contents', async () => {
+      mockStat.mockResolvedValue({ isDirectory: () => false, size: 20000 } as any);
 
-      const result = await execute({ path: 'logo.png' });
+      const result = await execute({ path: '/proj/logo.png' });
 
-      expect(result).toContain('image preview');
+      expect(result).toBe('Opened image preview: logo.png');
+      expect(mockReadFile).not.toHaveBeenCalled();
     });
   });
 
   describe('error flows', () => {
-    it('throws UserError when file not found', async () => {
-      mockValidate.mockResolvedValue({
-        valid: false,
-        errorMessage: 'File not found: /proj/missing.ts',
-      });
+    it('throws UserError with file-not-found message and does not spawn when stat throws ENOENT', async () => {
+      mockStat.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
-      await expect(execute({ path: 'missing.ts' })).rejects.toBeInstanceOf(UserError);
-      expect(mockLaunch).not.toHaveBeenCalled();
+      await expect(execute({ path: '/proj/missing.ts' })).rejects.toBeInstanceOf(UserError);
+      await expect(execute({ path: '/proj/missing.ts' })).rejects.toThrow('File not found');
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('throws UserError when file too large', async () => {
-      mockValidate.mockResolvedValue({
-        valid: false,
-        errorMessage: 'File too large for preview (15.0MB). Consider using line range.',
-      });
+    it('throws UserError with file-too-large message and does not spawn when size exceeds 10MB', async () => {
+      mockStat.mockResolvedValue({ isDirectory: () => false, size: 15_000_000 } as any);
 
-      await expect(execute({ path: 'huge.ts' })).rejects.toBeInstanceOf(UserError);
-      expect(mockLaunch).not.toHaveBeenCalled();
+      await expect(execute({ path: '/proj/huge.bin' })).rejects.toBeInstanceOf(UserError);
+      await expect(execute({ path: '/proj/huge.bin' })).rejects.toThrow('File too large');
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('throws UserError when path is directory', async () => {
-      mockValidate.mockResolvedValue({
-        valid: false,
-        errorMessage: 'Expected a file path, got a directory: /proj/src',
-      });
+    it('throws UserError with directory message and does not spawn when path is a directory', async () => {
+      mockStat.mockResolvedValue({ isDirectory: () => true, size: 0 } as any);
 
-      await expect(execute({ path: 'src' })).rejects.toBeInstanceOf(UserError);
-      expect(mockLaunch).not.toHaveBeenCalled();
+      await expect(execute({ path: '/proj/src' })).rejects.toBeInstanceOf(UserError);
+      await expect(execute({ path: '/proj/src' })).rejects.toThrow('got a directory');
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('throws UserError when binary not found', async () => {
-      mockValidate.mockResolvedValue({
-        valid: true,
-        absolutePath: '/proj/main.ts',
-        fileType: 'code',
-        lineCount: 50,
-        sizeBytes: 1000,
-      });
+    it('throws UserError with binary-not-found message and does not spawn when fs.access fails', async () => {
+      mockStat.mockResolvedValue({ isDirectory: () => false, size: 1000 } as any);
+      mockReadFile.mockResolvedValue(Array(50).fill('x').join('\n') as any);
       mockFsAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
-      await expect(execute({ path: 'main.ts' })).rejects.toBeInstanceOf(UserError);
-      await expect(execute({ path: 'main.ts' })).rejects.toThrow('Preview app not found');
-      expect(mockLaunch).not.toHaveBeenCalled();
+      await expect(execute({ path: '/proj/main.ts' })).rejects.toBeInstanceOf(UserError);
+      await expect(execute({ path: '/proj/main.ts' })).rejects.toThrow('Preview app not found');
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
+    it('throws UserError with unsupported-file-type message and does not spawn for .exe files', async () => {
+      mockStat.mockResolvedValue({ isDirectory: () => false, size: 100 } as any);
+
+      await expect(execute({ path: '/proj/data.exe' })).rejects.toBeInstanceOf(UserError);
+      await expect(execute({ path: '/proj/data.exe' })).rejects.toThrow('Unsupported file type');
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
   });
 });

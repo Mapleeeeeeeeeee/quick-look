@@ -1,5 +1,4 @@
 import path from 'node:path';
-import fs from 'node:fs/promises';
 import { z } from 'zod';
 import { UserError } from 'fastmcp';
 import { validateFile } from './validator.js';
@@ -22,18 +21,16 @@ export function createShowFileTool() {
         throw new UserError(result.errorMessage);
       }
 
-      if (result.fileType === 'unsupported') {
-        throw new UserError('Unsupported file type: ' + path.extname(args.path));
-      }
-
       const binaryPath = resolveAppBinary();
-      try {
-        await fs.access(binaryPath);
-      } catch {
-        throw new UserError("Preview app not found. Run 'npm run build:app' in copilot-preview/");
-      }
 
-      await launchOrUpdate(result.absolutePath, args.startLine, args.endLine);
+      try {
+        await launchOrUpdate(binaryPath, result.absolutePath, args.startLine, args.endLine);
+      } catch (error) {
+        if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+          throw new UserError("Preview app not found. Run 'pnpm build:app' in copilot-preview/");
+        }
+        throw new UserError(`Failed to launch preview: ${error instanceof Error ? error.message : String(error)}`);
+      }
 
       const filename = path.basename(result.absolutePath);
 
@@ -45,11 +42,10 @@ export function createShowFileTool() {
         return `Opened image preview: ${filename}`;
       }
 
-      let message = `Opened preview: ${filename} (${result.lineCount} lines)`;
-      if (args.startLine !== undefined && args.endLine !== undefined) {
-        message += `, highlighting lines ${args.startLine}-${args.endLine}`;
-      }
-      return message;
+      const lineSuffix = result.lineCount !== undefined ? ` (${result.lineCount} lines)` : '';
+      const rangeSuffix = args.startLine !== undefined && args.endLine !== undefined
+        ? `, highlighting lines ${args.startLine}-${args.endLine}` : '';
+      return `Opened preview: ${filename}${lineSuffix}${rangeSuffix}`;
     },
   };
 }

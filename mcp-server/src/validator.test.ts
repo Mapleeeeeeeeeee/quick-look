@@ -139,16 +139,26 @@ describe('validateFile', () => {
     });
 
     it.each([
-      ['image', 'image.png'],
-      ['image', 'photo.jpg'],
-      ['image', 'icon.svg'],
-      ['unsupported', 'program.exe'],
-      ['unsupported', 'archive.zip'],
-      ['unsupported', 'data.xyz'],
-    ])('returns %s type when given %s', async (expectedType, filename) => {
+      ['image.png', '.png'],
+      ['photo.jpg', '.jpg'],
+      ['icon.svg', '.svg'],
+    ])('returns image type for %s', async (filename) => {
       mockStat.mockResolvedValue(createMockStat({ size: 100 }));
       const result = await validateFile(`/path/${filename}`);
-      expect(result).toMatchObject({ valid: true, fileType: expectedType });
+      expect(result).toMatchObject({ valid: true, fileType: 'image' });
+    });
+
+    it.each([
+      ['program.exe', '.exe'],
+      ['archive.zip', '.zip'],
+      ['data.xyz', '.xyz'],
+    ])('returns error with unsupported file type message for %s', async (filename, ext) => {
+      mockStat.mockResolvedValue(createMockStat({ size: 100 }));
+      const result = await validateFile(`/path/${filename}`);
+      expect(result).toEqual({
+        valid: false,
+        errorMessage: `Unsupported file type: ${ext}`,
+      });
     });
   });
 

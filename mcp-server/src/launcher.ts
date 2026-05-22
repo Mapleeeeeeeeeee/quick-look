@@ -10,9 +10,12 @@ export function resolveAppBinary(): string {
   return path.resolve(__dirname, '../../src-tauri/target/release/copilot-preview');
 }
 
-export async function launchOrUpdate(absolutePath: string, startLine?: number, endLine?: number): Promise<void> {
-  const binaryPath = resolveAppBinary();
-
+export async function launchOrUpdate(
+  binaryPath: string,
+  absolutePath: string,
+  startLine?: number,
+  endLine?: number,
+): Promise<void> {
   const args: string[] = [absolutePath];
   if (startLine !== undefined) {
     args.push('--start-line', `${startLine}`);
@@ -21,6 +24,12 @@ export async function launchOrUpdate(absolutePath: string, startLine?: number, e
     args.push('--end-line', `${endLine}`);
   }
 
-  const child = spawn(binaryPath, args, { detached: true, stdio: 'ignore' });
-  child.unref();
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(binaryPath, args, { detached: true, stdio: 'ignore' });
+    child.on('error', reject);
+    child.on('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
 }

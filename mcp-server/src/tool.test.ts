@@ -3,24 +3,31 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 vi.mock('node:fs/promises', () => ({
   stat: vi.fn(),
   readFile: vi.fn(),
-  default: { access: vi.fn() },
-  access: vi.fn(),
 }));
 
 vi.mock('node:child_process', () => ({
-  spawn: vi.fn(() => ({
-    unref: vi.fn(),
-  })),
+  spawn: vi.fn(() => {
+    const listeners: Record<string, Function> = {};
+    const child = {
+      on: vi.fn((event: string, cb: Function) => {
+        listeners[event] = cb;
+        if (event === 'spawn') {
+          queueMicrotask(() => cb());
+        }
+      }),
+      unref: vi.fn(),
+    };
+    return child;
+  }),
 }));
 
-import fs, { stat, readFile } from 'node:fs/promises';
+import { stat, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { createShowFileTool } from './tool.js';
 import { UserError } from 'fastmcp';
 
 const mockStat = vi.mocked(stat);
 const mockReadFile = vi.mocked(readFile);
-const mockFsAccess = vi.mocked(fs.access);
 const mockSpawn = vi.mocked(spawn);
 
 describe('show_file tool integration', () => {
@@ -29,8 +36,6 @@ describe('show_file tool integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('COPILOT_PREVIEW_BINARY', '/mock/binary');
-    mockFsAccess.mockResolvedValue(undefined);
-    mockSpawn.mockReturnValue({ unref: vi.fn() } as any);
     const tool = createShowFileTool();
     execute = tool.execute;
   });
@@ -108,37 +113,53 @@ describe('show_file tool integration', () => {
     it('throws UserError with file-not-found message and does not spawn when stat throws ENOENT', async () => {
       mockStat.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
-      await expect(execute({ path: '/proj/missing.ts' })).rejects.toThrow('File not found');
+      const error = await execute({ path: '/proj/missing.ts' }).catch(e => e);
+      expect(error).toBeInstanceOf(UserError);
+      expect(error.message).toContain('File not found');
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
     it('throws UserError with file-too-large message and does not spawn when size exceeds 10MB', async () => {
       mockStat.mockResolvedValue({ isDirectory: () => false, size: 15_000_000 } as any);
 
-      await expect(execute({ path: '/proj/huge.bin' })).rejects.toThrow('File too large');
+      const error = await execute({ path: '/proj/huge.ts' }).catch(e => e);
+      expect(error).toBeInstanceOf(UserError);
+      expect(error.message).toContain('File too large');
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
     it('throws UserError with directory message and does not spawn when path is a directory', async () => {
       mockStat.mockResolvedValue({ isDirectory: () => true, size: 0 } as any);
 
-      await expect(execute({ path: '/proj/src' })).rejects.toThrow('got a directory');
+      const error = await execute({ path: '/proj/src' }).catch(e => e);
+      expect(error).toBeInstanceOf(UserError);
+      expect(error.message).toContain('got a directory');
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('throws UserError with binary-not-found message and does not spawn when fs.access fails', async () => {
+    it('throws UserError with binary-not-found message when spawn fails with ENOENT', async () => {
       mockStat.mockResolvedValue({ isDirectory: () => false, size: 1000 } as any);
       mockReadFile.mockResolvedValue(Array(50).fill('x').join('\n') as any);
-      mockFsAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+      mockSpawn.mockReturnValue({
+        on: vi.fn((event: string, cb: Function) => {
+          if (event === 'error') {
+            queueMicrotask(() => cb(Object.assign(new Error('ENOENT'), { code: 'ENOENT' })));
+          }
+        }),
+        unref: vi.fn(),
+      } as any);
 
-      await expect(execute({ path: '/proj/main.ts' })).rejects.toThrow('Preview app not found');
-      expect(mockSpawn).not.toHaveBeenCalled();
+      const error = await execute({ path: '/proj/main.ts' }).catch(e => e);
+      expect(error).toBeInstanceOf(UserError);
+      expect(error.message).toContain('Preview app not found');
     });
 
     it('throws UserError with unsupported-file-type message and does not spawn for .exe files', async () => {
       mockStat.mockResolvedValue({ isDirectory: () => false, size: 100 } as any);
 
-      await expect(execute({ path: '/proj/data.exe' })).rejects.toThrow('Unsupported file type');
+      const error = await execute({ path: '/proj/data.exe' }).catch(e => e);
+      expect(error).toBeInstanceOf(UserError);
+      expect(error.message).toContain('Unsupported file type');
       expect(mockSpawn).not.toHaveBeenCalled();
     });
   });

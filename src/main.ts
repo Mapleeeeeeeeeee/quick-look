@@ -1,11 +1,12 @@
 import './styles/main.css';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { setupKeyboard, setupDragRegion } from './keyboard';
 
 interface FileRequest {
   path: string;
-  start_line?: number;
-  end_line?: number;
+  startLine?: number;
+  endLine?: number;
 }
 
 function handleFileRequest(request: FileRequest): void {
@@ -14,7 +15,6 @@ function handleFileRequest(request: FileRequest): void {
     const filename = request.path.split('/').pop() ?? request.path;
     titleEl.textContent = filename;
   }
-  // Phase 4+ 會加 renderer dispatch，現在先 console.log
   console.log('File request received:', request);
 }
 
@@ -22,13 +22,14 @@ async function init(): Promise<void> {
   setupKeyboard();
   setupDragRegion();
 
-  await listen<FileRequest>('file-ready', (event) => {
-    handleFileRequest(event.payload);
-  });
-
   await listen<FileRequest>('new-file-request', (event) => {
     handleFileRequest(event.payload);
   });
+
+  const initialRequest = await invoke<FileRequest | null>('get_initial_request');
+  if (initialRequest) {
+    handleFileRequest(initialRequest);
+  }
 }
 
 init();

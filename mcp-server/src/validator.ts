@@ -143,6 +143,10 @@ export async function validateFile(
 
   const fileType = detectFileType(absolutePath);
 
+  if (fileType === "unsupported") {
+    return { valid: false, errorMessage: `Unsupported file type: ${extname(absolutePath)}` };
+  }
+
   let lineCount: number | undefined;
   if ((fileType === "code" || fileType === "markdown") && sizeBytes <= ONE_MB) {
     const content = await readFile(absolutePath, "utf-8");

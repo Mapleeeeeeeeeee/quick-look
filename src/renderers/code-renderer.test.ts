@@ -1,41 +1,41 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from "vitest";
 
-vi.mock('monaco-editor', () => ({}));
-vi.mock('@tauri-apps/plugin-fs', () => ({
+vi.mock("monaco-editor", () => ({}));
+vi.mock("@tauri-apps/plugin-fs", () => ({
   readTextFile: vi.fn(),
 }));
 
-import { detectLanguage } from './code-renderer';
+import { detectLanguage } from "./code-renderer";
 
-describe('detectLanguage', () => {
+describe("detectLanguage", () => {
   it.each([
-    ['main.ts', 'typescript'],
-    ['app.tsx', 'typescript'],
-    ['index.js', 'javascript'],
-    ['app.jsx', 'javascript'],
-    ['script.py', 'python'],
-    ['lib.rs', 'rust'],
-    ['main.go', 'go'],
-    ['App.java', 'java'],
-    ['main.c', 'c'],
-    ['main.cpp', 'cpp'],
-    ['style.css', 'css'],
-    ['page.html', 'html'],
-    ['data.json', 'json'],
-    ['config.yaml', 'yaml'],
-    ['config.yml', 'yaml'],
-    ['Cargo.toml', 'ini'],
-    ['query.sql', 'sql'],
-    ['script.sh', 'shell'],
-    ['run.bash', 'shell'],
-    ['schema.graphql', 'graphql'],
-    ['Dockerfile.dockerfile', 'dockerfile'],
-    ['main.swift', 'swift'],
-    ['App.kt', 'kotlin'],
-    ['app.vue', 'html'],
-    ['unknown.xyz', 'plaintext'],
-    ['Makefile', 'plaintext'],
-  ])('returns %s language for %s', (filename, expected) => {
+    ["typescript", "main.ts"],
+    ["typescript", "app.tsx"],
+    ["javascript", "index.js"],
+    ["javascript", "app.jsx"],
+    ["python", "script.py"],
+    ["rust", "lib.rs"],
+    ["go", "main.go"],
+    ["java", "App.java"],
+    ["c", "main.c"],
+    ["cpp", "main.cpp"],
+    ["css", "style.css"],
+    ["html", "page.html"],
+    ["json", "data.json"],
+    ["yaml", "config.yaml"],
+    ["yaml", "config.yml"],
+    ["ini", "Cargo.toml"],
+    ["sql", "query.sql"],
+    ["shell", "script.sh"],
+    ["shell", "run.bash"],
+    ["graphql", "schema.graphql"],
+    ["dockerfile", "Dockerfile.dockerfile"],
+    ["swift", "main.swift"],
+    ["kotlin", "App.kt"],
+    ["html", "app.vue"],
+    ["plaintext", "unknown.xyz"],
+    ["plaintext", "Makefile"],
+  ])("returns %s language when given %s", (expected, filename) => {
     expect(detectLanguage(`/path/to/${filename}`)).toBe(expected);
   });
 });

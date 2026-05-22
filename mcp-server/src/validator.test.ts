@@ -55,7 +55,7 @@ describe('validateFile', () => {
       vi.unstubAllEnvs();
     });
 
-    it('uses absolute path as-is', async () => {
+    it('returns absolute path unchanged when given an absolute path', async () => {
       mockStat.mockResolvedValue(createMockStat());
       (mockReadFile as any).mockResolvedValue('hello');
 
@@ -69,7 +69,7 @@ describe('validateFile', () => {
   });
 
   describe('file existence', () => {
-    it('returns error for non-existent file', async () => {
+    it('returns File not found error when path does not exist', async () => {
       const enoentError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
       mockStat.mockRejectedValue(enoentError);
 
@@ -81,7 +81,7 @@ describe('validateFile', () => {
       });
     });
 
-    it('re-throws non-ENOENT errors', async () => {
+    it('re-throws error when stat fails with non-ENOENT code', async () => {
       const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
       mockStat.mockRejectedValue(permissionError);
 
@@ -90,7 +90,7 @@ describe('validateFile', () => {
   });
 
   describe('directory check', () => {
-    it('returns error for directory path', async () => {
+    it('returns directory error when path points to a directory', async () => {
       mockStat.mockResolvedValue(createMockStat({ isDirectory: true }));
 
       const result = await validateFile('/some/directory');
@@ -126,76 +126,34 @@ describe('validateFile', () => {
       expect(result).toMatchObject({ valid: true, fileType: expectedType });
     }
 
-    it('detects .rs as code', async () => {
-      await assertFileType('main.rs', 'code');
+    it.each([
+      ['code', 'main.rs'],
+      ['code', 'index.ts'],
+      ['code', 'script.py'],
+      ['markdown', 'README.md'],
+      ['markdown', 'doc.mdx'],
+      ['code', 'index.TS'],
+      ['code', 'Makefile'],
+    ])('returns %s type when given %s', async (expectedType, filename) => {
+      await assertFileType(filename, expectedType);
     });
 
-    it('detects .ts as code', async () => {
-      await assertFileType('index.ts', 'code');
-    });
-
-    it('detects .py as code', async () => {
-      await assertFileType('script.py', 'code');
-    });
-
-    it('detects .md as markdown', async () => {
-      await assertFileType('README.md', 'markdown');
-    });
-
-    it('detects .mdx as markdown', async () => {
-      await assertFileType('doc.mdx', 'markdown');
-    });
-
-    it('detects uppercase .TS as code', async () => {
-      await assertFileType('index.TS', 'code');
-    });
-
-    it('detects unknown extension as unsupported', async () => {
+    it.each([
+      ['image', 'image.png'],
+      ['image', 'photo.jpg'],
+      ['image', 'icon.svg'],
+      ['unsupported', 'program.exe'],
+      ['unsupported', 'archive.zip'],
+      ['unsupported', 'data.xyz'],
+    ])('returns %s type when given %s', async (expectedType, filename) => {
       mockStat.mockResolvedValue(createMockStat({ size: 100 }));
-      const result = await validateFile('/path/data.xyz');
-      expect(result).toMatchObject({ valid: true, fileType: 'unsupported' });
-    });
-
-    it('detects .png as image', async () => {
-      mockStat.mockResolvedValue(createMockStat({ size: 100 }));
-      const result = await validateFile('/path/image.png');
-      expect(result).toMatchObject({ valid: true, fileType: 'image' });
-    });
-
-    it('detects .jpg as image', async () => {
-      mockStat.mockResolvedValue(createMockStat({ size: 100 }));
-      const result = await validateFile('/path/photo.jpg');
-      expect(result).toMatchObject({ valid: true, fileType: 'image' });
-    });
-
-    it('detects .svg as image', async () => {
-      mockStat.mockResolvedValue(createMockStat({ size: 100 }));
-      const result = await validateFile('/path/icon.svg');
-      expect(result).toMatchObject({ valid: true, fileType: 'image' });
-    });
-
-    it('detects .exe as unsupported', async () => {
-      mockStat.mockResolvedValue(createMockStat({ size: 100 }));
-      const result = await validateFile('/path/program.exe');
-      expect(result).toMatchObject({ valid: true, fileType: 'unsupported' });
-    });
-
-    it('detects .zip as unsupported', async () => {
-      mockStat.mockResolvedValue(createMockStat({ size: 100 }));
-      const result = await validateFile('/path/archive.zip');
-      expect(result).toMatchObject({ valid: true, fileType: 'unsupported' });
-    });
-
-    it('detects extensionless file as code', async () => {
-      mockStat.mockResolvedValue(createMockStat({ size: 100 }));
-      (mockReadFile as any).mockResolvedValue('content');
-      const result = await validateFile('/path/Makefile');
-      expect(result).toMatchObject({ valid: true, fileType: 'code' });
+      const result = await validateFile(`/path/${filename}`);
+      expect(result).toMatchObject({ valid: true, fileType: expectedType });
     });
   });
 
   describe('line count', () => {
-    it('counts lines for code file ≤1MB', async () => {
+    it('returns line count when code file size is within 1MB', async () => {
       mockStat.mockResolvedValue(createMockStat({ size: 100 }));
       (mockReadFile as any).mockResolvedValue('line1\nline2\nline3');
 
@@ -204,14 +162,14 @@ describe('validateFile', () => {
       expect(result).toMatchObject({ valid: true, lineCount: 3 });
     });
 
-    it('counts lines at exact 1MB boundary', async () => {
+    it('returns line count when code file size is exactly at 1MB boundary', async () => {
       mockStat.mockResolvedValue(createMockStat({ size: 1_048_576 }));
       (mockReadFile as any).mockResolvedValue('line1\nline2');
       const result = await validateFile('/path/file.ts');
       expect(result).toMatchObject({ valid: true, lineCount: 2 });
     });
 
-    it('skips line count for code file >1MB', async () => {
+    it('returns undefined line count and skips readFile when code file exceeds 1MB', async () => {
       mockStat.mockResolvedValue(createMockStat({ size: 1_048_577 }));
 
       const result = await validateFile('/path/file.ts');
@@ -220,7 +178,7 @@ describe('validateFile', () => {
       expect(mockReadFile).not.toHaveBeenCalled();
     });
 
-    it('counts lines for markdown file', async () => {
+    it('returns line count when file is markdown', async () => {
       mockStat.mockResolvedValue(createMockStat({ size: 500 }));
       (mockReadFile as any).mockResolvedValue('# Title\n\nBody text.');
 
@@ -229,7 +187,7 @@ describe('validateFile', () => {
       expect(result).toMatchObject({ valid: true, lineCount: 3 });
     });
 
-    it('does not count lines for image file', async () => {
+    it('returns undefined line count and skips readFile when file is an image', async () => {
       mockStat.mockResolvedValue(createMockStat({ size: 100 }));
 
       const result = await validateFile('/path/image.png');

@@ -2,20 +2,20 @@ import './styles/main.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { setupKeyboard, setupDragRegion } from './keyboard';
+import type { FileRequest } from './types';
+import { renderFile } from './renderer';
 
-interface FileRequest {
-  path: string;
-  startLine?: number;
-  endLine?: number;
-}
-
-function handleFileRequest(request: FileRequest): void {
+function updateTitle(request: FileRequest): void {
   const titleEl = document.getElementById('title');
   if (titleEl) {
     const filename = request.path.split('/').pop() ?? request.path;
     titleEl.textContent = filename;
   }
-  console.log('File request received:', request);
+}
+
+async function handleFileRequest(request: FileRequest): Promise<void> {
+  updateTitle(request);
+  await renderFile(request);
 }
 
 async function init(): Promise<void> {
@@ -28,7 +28,7 @@ async function init(): Promise<void> {
 
   const initialRequest = await invoke<FileRequest | null>('get_initial_request');
   if (initialRequest) {
-    handleFileRequest(initialRequest);
+    await handleFileRequest(initialRequest);
   }
 }
 

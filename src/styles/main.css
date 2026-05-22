@@ -42,3 +42,7 @@ html, body {
   overflow: auto;
   padding: 16px;
 }
+
+.line-highlight {
+  background: rgba(255, 200, 0, 0.12);
+}

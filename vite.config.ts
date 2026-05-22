@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import monacoEditorPlugin from 'vite-plugin-monaco-editor';
 
 export default defineConfig({
   clearScreen: false,
@@ -13,4 +14,9 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_DEBUG,
     outDir: 'dist',
   },
+  plugins: [
+    (monacoEditorPlugin as any).default({
+      languageWorkers: ['editorWorkerService', 'typescript', 'json', 'css', 'html'],
+    }),
+  ],
 });

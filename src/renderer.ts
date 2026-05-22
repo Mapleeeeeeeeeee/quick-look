@@ -35,14 +35,16 @@ export async function renderFile(req: FileRequest): Promise<void> {
     currentRenderer = codeRenderer;
     await codeRenderer.mount(monacoContainer, req);
   } else if (fileType === "markdown") {
+    const { markdownRenderer } = await import('./renderers/markdown-renderer');
     monacoContainer.style.display = "none";
     contentContainer.style.display = "block";
-    contentContainer.textContent = `Markdown preview coming in Phase 5: ${req.path}`;
-    currentRenderer = null;
+    currentRenderer = markdownRenderer;
+    await markdownRenderer.mount(contentContainer, req);
   } else if (fileType === "image") {
-    monacoContainer.style.display = "none";
-    contentContainer.style.display = "block";
-    contentContainer.textContent = `Image preview coming in Phase 5: ${req.path}`;
-    currentRenderer = null;
+    const { imageRenderer } = await import('./renderers/image-renderer');
+    monacoContainer.style.display = 'none';
+    contentContainer.style.display = 'block';
+    currentRenderer = imageRenderer;
+    await imageRenderer.mount(contentContainer, req);
   }
 }

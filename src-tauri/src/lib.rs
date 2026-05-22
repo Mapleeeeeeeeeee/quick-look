@@ -111,6 +111,7 @@ pub fn run() {
                 }
             };
             app.manage(InitialRequest(Mutex::new(initial_request)));
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![get_initial_request])

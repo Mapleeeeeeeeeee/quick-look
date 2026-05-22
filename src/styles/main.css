@@ -46,3 +46,8 @@ html, body {
 .line-highlight {
   background: rgba(255, 200, 0, 0.12);
 }
+
+#content-container img {
+  display: block;
+  margin: auto;
+}

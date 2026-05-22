@@ -9,6 +9,7 @@
     "core:window:allow-close",
     "core:window:allow-set-focus",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-visible-on-all-workspaces",
     "fs:allow-read-text-file",
     {
       "identifier": "fs:scope",

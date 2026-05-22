@@ -11,6 +11,14 @@ vi.mock("./renderers/code-renderer", () => ({
   codeRenderer: mockRenderer,
 }));
 
+vi.mock("./renderers/markdown-renderer", () => ({
+  markdownRenderer: mockRenderer,
+}));
+
+vi.mock("./renderers/image-renderer", () => ({
+  imageRenderer: mockRenderer,
+}));
+
 describe("detectFileType", () => {
   it.each([
     ["markdown", "README.md"],
@@ -62,7 +70,7 @@ describe("renderFile", () => {
     const contentContainer = document.getElementById("content-container")!;
     expect(contentContainer.style.display).toBe("block");
     expect(monacoContainer.style.display).toBe("none");
-    expect(contentContainer.textContent).toContain("Phase 5");
+    expect(mockRenderer.mount).toHaveBeenCalled();
   });
 
   it("shows content container and hides monaco for image files", async () => {

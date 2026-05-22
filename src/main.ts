@@ -1,14 +1,14 @@
-import './styles/main.css';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { setupKeyboard, setupDragRegion } from './keyboard';
-import type { FileRequest } from './types';
-import { renderFile } from './renderer';
+import "./styles/main.css";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { setupKeyboard, setupDragRegion } from "./keyboard";
+import type { FileRequest } from "./types";
+import { renderFile } from "./renderer";
 
 function updateTitle(request: FileRequest): void {
-  const titleEl = document.getElementById('title');
+  const titleEl = document.getElementById("title");
   if (titleEl) {
-    const filename = request.path.split('/').pop() ?? request.path;
+    const filename = request.path.split("/").pop() ?? request.path;
     titleEl.textContent = filename;
   }
 }
@@ -22,11 +22,13 @@ async function init(): Promise<void> {
   setupKeyboard();
   setupDragRegion();
 
-  await listen<FileRequest>('new-file-request', (event) => {
+  await listen<FileRequest>("new-file-request", (event) => {
     handleFileRequest(event.payload);
   });
 
-  const initialRequest = await invoke<FileRequest | null>('get_initial_request');
+  const initialRequest = await invoke<FileRequest | null>(
+    "get_initial_request",
+  );
   if (initialRequest) {
     await handleFileRequest(initialRequest);
   }

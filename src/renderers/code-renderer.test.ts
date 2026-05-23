@@ -5,7 +5,8 @@ type FakeEditor = {
   setModel: ReturnType<typeof vi.fn>;
   getModel: ReturnType<typeof vi.fn>;
   deltaDecorations: ReturnType<typeof vi.fn>;
-  revealLineInCenter: ReturnType<typeof vi.fn>;
+  getTopForLineNumber: ReturnType<typeof vi.fn>;
+  setScrollTop: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
   isDisposed: boolean;
 };
@@ -20,7 +21,8 @@ const makeEditor = (): FakeEditor => {
     }),
     getModel: vi.fn(() => currentModel),
     deltaDecorations: vi.fn(),
-    revealLineInCenter: vi.fn(),
+    getTopForLineNumber: vi.fn().mockReturnValue(0),
+    setScrollTop: vi.fn(),
     dispose: vi.fn(),
     isDisposed: false,
   };
@@ -149,14 +151,15 @@ describe("codeRenderer lifecycle", () => {
     });
 
     expect(createdEditors[0].deltaDecorations).toHaveBeenCalled();
-    expect(createdEditors[0].revealLineInCenter).toHaveBeenCalledWith(5);
+    expect(createdEditors[0].getTopForLineNumber).toHaveBeenCalledWith(5);
+    expect(createdEditors[0].setScrollTop).toHaveBeenCalled();
   });
 
   it("does not apply decorations when no startLine is provided", async () => {
     await codeRenderer.mount(container, { path: "/proj/main.ts" });
 
     expect(createdEditors[0].deltaDecorations).not.toHaveBeenCalled();
-    expect(createdEditors[0].revealLineInCenter).not.toHaveBeenCalled();
+    expect(createdEditors[0].setScrollTop).not.toHaveBeenCalled();
   });
 
   it("reads file content via readTextFile", async () => {

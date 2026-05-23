@@ -97,7 +97,7 @@ export const codeRenderer: Renderer = {
           },
         ],
       );
-      editor.revealLineInCenter(req.startLine);
+      editor.setScrollTop(editor.getTopForLineNumber(req.startLine));
     }
   },
 

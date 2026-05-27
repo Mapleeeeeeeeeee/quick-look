@@ -8,7 +8,7 @@ export function createShowFileTool() {
   return {
     name: "show_file",
     description:
-      "Display a file in a floating preview panel on the user's screen. The Read tool loads files into your context, invisible to the user. This tool makes the file visible to the user directly, saving the output tokens you would spend printing file contents. Use it whenever the user wants to look at a file themselves rather than have you analyze or summarize it. Supports code (syntax highlighting), markdown (rendered), and images.",
+      "Open a floating preview panel on the user's screen. Supports code (syntax highlighting), markdown (rendered), and images.",
     parameters: z.object({
       path: z
         .string()

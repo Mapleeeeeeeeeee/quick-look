@@ -17,16 +17,29 @@ export function detectFileType(
 }
 
 let currentRenderer: Renderer | null = null;
+let currentFileType: string | null = null;
+
+export function resetRenderer(): void {
+  if (currentRenderer) {
+    currentRenderer.unmount();
+    currentRenderer = null;
+  }
+  currentFileType = null;
+}
 
 export async function renderFile(req: FileRequest): Promise<void> {
   const monacoContainer = document.getElementById("monaco-container")!;
   const contentContainer = document.getElementById("content-container")!;
 
-  if (currentRenderer) {
+  const fileType = detectFileType(req.path);
+  const sameType = fileType === currentFileType;
+
+  if (currentRenderer && !sameType) {
     currentRenderer.unmount();
+    currentRenderer = null;
   }
 
-  const fileType = detectFileType(req.path);
+  currentFileType = fileType;
 
   if (fileType === "code") {
     const { codeRenderer } = await import("./renderers/code-renderer");
@@ -35,15 +48,15 @@ export async function renderFile(req: FileRequest): Promise<void> {
     currentRenderer = codeRenderer;
     await codeRenderer.mount(monacoContainer, req);
   } else if (fileType === "markdown") {
-    const { markdownRenderer } = await import('./renderers/markdown-renderer');
+    const { markdownRenderer } = await import("./renderers/markdown-renderer");
     monacoContainer.style.display = "none";
     contentContainer.style.display = "block";
     currentRenderer = markdownRenderer;
     await markdownRenderer.mount(contentContainer, req);
   } else if (fileType === "image") {
-    const { imageRenderer } = await import('./renderers/image-renderer');
-    monacoContainer.style.display = 'none';
-    contentContainer.style.display = 'block';
+    const { imageRenderer } = await import("./renderers/image-renderer");
+    monacoContainer.style.display = "none";
+    contentContainer.style.display = "block";
     currentRenderer = imageRenderer;
     await imageRenderer.mount(contentContainer, req);
   }

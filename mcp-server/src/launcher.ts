@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export function resolveAppBinary(): string {
   const envBinary = process.env['COPILOT_PREVIEW_BINARY'];
   if (envBinary) return envBinary;
-  return path.resolve(__dirname, '../../src-tauri/target/release/copilot-preview');
+  return path.resolve(__dirname, '../../swift-app/build/copilot-preview');
 }
 
 export async function launchOrUpdate(

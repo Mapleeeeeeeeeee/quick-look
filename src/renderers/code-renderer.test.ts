@@ -58,9 +58,11 @@ vi.mock("monaco-editor", () => {
   };
 });
 
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  readTextFile: vi.fn().mockResolvedValue("file content here"),
-}));
+const mockFetch = vi.fn().mockResolvedValue({
+  text: () => Promise.resolve("file content here"),
+});
+
+vi.stubGlobal("fetch", mockFetch);
 
 import { detectLanguage, codeRenderer } from "./code-renderer";
 
@@ -102,6 +104,7 @@ describe("codeRenderer lifecycle", () => {
 
   beforeEach(() => {
     createdEditors.length = 0;
+    mockFetch.mockClear();
     container = document.createElement("div");
     document.body.appendChild(container);
     codeRenderer.unmount();
@@ -162,10 +165,9 @@ describe("codeRenderer lifecycle", () => {
     expect(createdEditors[0].setScrollTop).not.toHaveBeenCalled();
   });
 
-  it("reads file content via readTextFile", async () => {
+  it("reads file content via fetch with file:// URL", async () => {
     await codeRenderer.mount(container, { path: "/proj/main.ts" });
 
-    const { readTextFile } = await import("@tauri-apps/plugin-fs");
-    expect(readTextFile).toHaveBeenCalledWith("/proj/main.ts");
+    expect(mockFetch).toHaveBeenCalledWith("file:///proj/main.ts");
   });
 });

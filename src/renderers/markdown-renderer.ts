@@ -1,7 +1,6 @@
 import '../styles/markdown.css';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { readTextFile } from '@tauri-apps/plugin-fs';
 import type { FileRequest, Renderer } from '../types';
 
 let container: HTMLElement | null = null;
@@ -10,7 +9,8 @@ export const markdownRenderer: Renderer = {
   async mount(el: HTMLElement, req: FileRequest): Promise<void> {
     container = el;
 
-    const content = await readTextFile(req.path);
+    const response = await fetch(`file://${req.path}`);
+    const content = await response.text();
     const rawHtml = marked.parse(content) as string;
     const safeHtml = DOMPurify.sanitize(rawHtml);
 

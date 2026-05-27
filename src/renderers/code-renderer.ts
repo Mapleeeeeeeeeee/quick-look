@@ -1,5 +1,4 @@
 import * as monaco from "monaco-editor";
-import { readTextFile } from "@tauri-apps/plugin-fs";
 import type { FileRequest, Renderer } from "../types";
 
 const LANGUAGE_MAP: Record<string, string> = {
@@ -54,7 +53,8 @@ let editor: monaco.editor.IStandaloneCodeEditor | null = null;
 
 export const codeRenderer: Renderer = {
   async mount(container: HTMLElement, req: FileRequest): Promise<void> {
-    const content = await readTextFile(req.path);
+    const response = await fetch(`file://${req.path}`);
+    const content = await response.text();
     const language = detectLanguage(req.path);
 
     if (editor) {

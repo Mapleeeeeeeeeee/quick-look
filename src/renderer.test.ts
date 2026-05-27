@@ -83,7 +83,19 @@ describe("renderFile", () => {
     expect(monacoContainer.style.display).toBe("none");
   });
 
-  it("unmounts previous renderer before mounting new one", async () => {
+  it("skips unmount when switching between same file type", async () => {
+    const { renderFile } = await import("./renderer");
+    await renderFile({ path: "/proj/a.ts" });
+    mockRenderer.unmount.mockClear();
+    mockRenderer.mount.mockClear();
+
+    await renderFile({ path: "/proj/b.ts" });
+
+    expect(mockRenderer.unmount).not.toHaveBeenCalled();
+    expect(mockRenderer.mount).toHaveBeenCalledTimes(1);
+  });
+
+  it("unmounts previous renderer when switching to different file type", async () => {
     const { renderFile } = await import("./renderer");
     await renderFile({ path: "/proj/a.ts" });
 
@@ -95,7 +107,7 @@ describe("renderFile", () => {
       callOrder.push("mount");
     });
 
-    await renderFile({ path: "/proj/b.ts" });
+    await renderFile({ path: "/proj/README.md" });
 
     expect(callOrder).toEqual(["unmount", "mount"]);
   });

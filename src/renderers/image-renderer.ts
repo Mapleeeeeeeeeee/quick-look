@@ -1,4 +1,3 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
 import type { FileRequest, Renderer } from '../types';
 
 let container: HTMLElement | null = null;
@@ -11,7 +10,7 @@ export const imageRenderer: Renderer = {
     const filename = req.path.substring(req.path.lastIndexOf('/') + 1);
 
     const img = document.createElement('img');
-    img.src = convertFileSrc(req.path);
+    img.src = `file://${req.path}`;
     img.alt = filename;
     img.style.objectFit = 'contain';
     img.style.maxWidth = '100%';

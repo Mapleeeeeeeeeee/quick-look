@@ -1,5 +1,5 @@
 {
-  "name": "copilot-preview-mcp",
+  "name": "quick-look-mcp",
   "version": "0.1.0",
   "description": "MCP server for Claude Code file preview",
   "type": "module",

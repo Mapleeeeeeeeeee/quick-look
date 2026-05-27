@@ -5,3 +5,4 @@ src-tauri/gen/
 coverage/
 *.tsbuildinfo
 .DS_Store
+swift-app/build/

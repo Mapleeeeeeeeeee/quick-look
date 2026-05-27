@@ -111,7 +111,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(handleNewFileRequest(_:)),
-            name: NSNotification.Name("com.copilot-preview.open-file"),
+            name: NSNotification.Name("com.quick-look.open-file"),
             object: nil
         )
     }
@@ -287,7 +287,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
 var lockFd: Int32 = -1
 
 func acquireLock() -> Bool {
-    let lockPath = "/tmp/copilot-preview.lock"
+    let lockPath = "/tmp/quick-look.lock"
     let fd = open(lockPath, O_CREAT | O_RDWR, 0o644)
     guard fd >= 0 else { return false }
     if flock(fd, LOCK_EX | LOCK_NB) == 0 {
@@ -311,7 +311,7 @@ func sendToExistingInstance(_ args: [String]) {
     // Acceptable for a local preview tool; for production reliability,
     // consider file-based IPC with DispatchSourceFileSystemObject.
     DistributedNotificationCenter.default().postNotificationName(
-        NSNotification.Name("com.copilot-preview.open-file"),
+        NSNotification.Name("com.quick-look.open-file"),
         object: nil,
         userInfo: userInfo,
         deliverImmediately: true

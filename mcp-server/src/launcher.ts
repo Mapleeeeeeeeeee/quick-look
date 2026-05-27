@@ -1,13 +1,13 @@
-import { spawn } from 'node:child_process';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function resolveAppBinary(): string {
-  const envBinary = process.env['COPILOT_PREVIEW_BINARY'];
+  const envBinary = process.env["QUICK_LOOK_BINARY"];
   if (envBinary) return envBinary;
-  return path.resolve(__dirname, '../../swift-app/build/copilot-preview');
+  return path.resolve(__dirname, "../../swift-app/build/quick-look");
 }
 
 export async function launchOrUpdate(
@@ -18,16 +18,16 @@ export async function launchOrUpdate(
 ): Promise<void> {
   const args: string[] = [absolutePath];
   if (startLine !== undefined) {
-    args.push('--start-line', `${startLine}`);
+    args.push("--start-line", `${startLine}`);
   }
   if (endLine !== undefined) {
-    args.push('--end-line', `${endLine}`);
+    args.push("--end-line", `${endLine}`);
   }
 
   return new Promise<void>((resolve, reject) => {
-    const child = spawn(binaryPath, args, { detached: true, stdio: 'ignore' });
-    child.on('error', reject);
-    child.on('spawn', () => {
+    const child = spawn(binaryPath, args, { detached: true, stdio: "ignore" });
+    child.on("error", reject);
+    child.on("spawn", () => {
       child.unref();
       resolve();
     });

@@ -9,7 +9,7 @@ import path from "node:path";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BINARY_PATH = path.resolve(
   __dirname,
-  "../src-tauri/target/release/copilot-preview",
+  "../src-tauri/target/release/quick-look",
 );
 const BINARY_EXISTS = existsSync(BINARY_PATH);
 const SMOKE_ENABLED = BINARY_EXISTS && process.env["SMOKE_TEST"] === "1";
@@ -31,7 +31,7 @@ describe.skipIf(!SMOKE_ENABLED)("app smoke tests", () => {
     }
     appProcess = null;
     try {
-      execSync("pkill -f copilot-preview 2>/dev/null");
+      execSync("pkill -f quick-look 2>/dev/null");
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 500));
   });
@@ -110,7 +110,7 @@ describe.skipIf(!SMOKE_ENABLED)("app smoke tests", () => {
 
 function countProcesses(): number {
   try {
-    const output = execSync("pgrep -f copilot-preview", { encoding: "utf-8" });
+    const output = execSync("pgrep -f quick-look", { encoding: "utf-8" });
     return output.trim().split("\n").filter(Boolean).length;
   } catch {
     return 0;

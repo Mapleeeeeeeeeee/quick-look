@@ -1,6 +1,6 @@
 .PHONY: build clean run
 
-APP_NAME = copilot-preview
+APP_NAME = quick-look
 BUILD_DIR = build
 SOURCES = Sources/main.swift
 

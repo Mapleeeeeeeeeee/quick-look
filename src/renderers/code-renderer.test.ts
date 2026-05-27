@@ -8,6 +8,7 @@ type FakeEditor = {
   getTopForLineNumber: ReturnType<typeof vi.fn>;
   setScrollTop: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
+  getAction: ReturnType<typeof vi.fn>;
   isDisposed: boolean;
 };
 
@@ -24,6 +25,7 @@ const makeEditor = (): FakeEditor => {
     getTopForLineNumber: vi.fn().mockReturnValue(0),
     setScrollTop: vi.fn(),
     dispose: vi.fn(),
+    getAction: vi.fn().mockReturnValue({ run: vi.fn() }),
     isDisposed: false,
   };
   editor.dispose.mockImplementation(() => {
@@ -64,7 +66,7 @@ const mockFetch = vi.fn().mockResolvedValue({
 
 vi.stubGlobal("fetch", mockFetch);
 
-import { detectLanguage, codeRenderer } from "./code-renderer";
+import { detectLanguage, codeRenderer, triggerFind } from "./code-renderer";
 
 describe("detectLanguage", () => {
   it.each([
@@ -169,5 +171,38 @@ describe("codeRenderer lifecycle", () => {
     await codeRenderer.mount(container, { path: "/proj/main.ts" });
 
     expect(mockFetch).toHaveBeenCalledWith("file:///proj/main.ts");
+  });
+});
+
+describe("triggerFind", () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    createdEditors.length = 0;
+    mockFetch.mockClear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    codeRenderer.unmount();
+  });
+
+  afterEach(() => {
+    codeRenderer.unmount();
+    document.body.removeChild(container);
+  });
+
+  it('calls getAction with "actions.find" and runs it when editor exists', async () => {
+    await codeRenderer.mount(container, { path: "/proj/main.ts" });
+    const editor = createdEditors[0];
+    const fakeAction = { run: vi.fn() };
+    editor.getAction.mockReturnValue(fakeAction);
+
+    triggerFind();
+
+    expect(editor.getAction).toHaveBeenCalledWith("actions.find");
+    expect(fakeAction.run).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not throw when called before any editor is mounted", () => {
+    expect(() => triggerFind()).not.toThrow();
   });
 });

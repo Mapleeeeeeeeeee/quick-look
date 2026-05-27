@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { detectFileType } from "./renderer";
+import { detectFileType, getCurrentFileType, resetRenderer } from "./renderer";
 
 const mockRenderer = vi.hoisted(() => ({
   mount: vi.fn().mockResolvedValue(undefined),
@@ -119,5 +119,71 @@ describe("renderFile", () => {
 
     const monacoContainer = document.getElementById("monaco-container")!;
     expect(mockRenderer.mount).toHaveBeenCalledWith(monacoContainer, req);
+  });
+});
+
+describe("getCurrentFileType", () => {
+  beforeEach(() => {
+    resetRenderer();
+    mockRenderer.mount.mockClear();
+    mockRenderer.unmount.mockClear();
+    document.body.innerHTML = `
+      <div id="monaco-container" style="display: none"></div>
+      <div id="content-container" style="display: none"></div>
+    `;
+  });
+
+  it("returns null before any file has been rendered", () => {
+    expect(getCurrentFileType()).toBeNull();
+  });
+
+  it('returns "code" after rendering a .ts file', async () => {
+    const { renderFile } = await import("./renderer");
+    await renderFile({ path: "/proj/main.ts" });
+
+    expect(getCurrentFileType()).toBe("code");
+  });
+
+  it('returns "markdown" after rendering a .md file', async () => {
+    const { renderFile } = await import("./renderer");
+    await renderFile({ path: "/proj/README.md" });
+
+    expect(getCurrentFileType()).toBe("markdown");
+  });
+});
+
+describe("resetRenderer", () => {
+  beforeEach(() => {
+    resetRenderer();
+    mockRenderer.mount.mockClear();
+    mockRenderer.unmount.mockClear();
+    document.body.innerHTML = `
+      <div id="monaco-container" style="display: none"></div>
+      <div id="content-container" style="display: none"></div>
+    `;
+  });
+
+  it("resets currentFileType to null after a file was rendered", async () => {
+    const { renderFile } = await import("./renderer");
+    await renderFile({ path: "/proj/main.ts" });
+    expect(getCurrentFileType()).toBe("code");
+
+    resetRenderer();
+
+    expect(getCurrentFileType()).toBeNull();
+  });
+
+  it("calls unmount on the active renderer when reset", async () => {
+    const { renderFile } = await import("./renderer");
+    await renderFile({ path: "/proj/main.ts" });
+    mockRenderer.unmount.mockClear();
+
+    resetRenderer();
+
+    expect(mockRenderer.unmount).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not throw when called with no active renderer", () => {
+    expect(() => resetRenderer()).not.toThrow();
   });
 });

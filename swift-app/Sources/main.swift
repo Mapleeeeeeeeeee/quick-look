@@ -18,6 +18,12 @@ class PreviewPanel: NSPanel {
     override var canBecomeMain: Bool { true }
 }
 
+class DragHandleView: NSView {
+    override func mouseDown(with event: NSEvent) {
+        window?.performDrag(with: event)
+    }
+}
+
 // Parses CLI arguments into a (path, startLine, endLine) tuple.
 // Used by both AppDelegate and sendToExistingInstance so the logic lives in one place.
 func parseArguments(_ args: [String]) -> (path: String?, startLine: Int?, endLine: Int?) {
@@ -135,7 +141,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
 
-        panel.contentView = webView
+        let containerView = NSView(frame: contentRect)
+        containerView.autoresizesSubviews = true
+
+        webView.frame = contentRect
+        containerView.addSubview(webView)
+
+        let dragHandle = DragHandleView(frame: NSRect(x: 0, y: contentRect.height - 32, width: contentRect.width, height: 32))
+        dragHandle.autoresizingMask = [.width, .minYMargin]
+        containerView.addSubview(dragHandle)
+
+        panel.contentView = containerView
 
         if let indexURL = findDistPath() {
             webView.loadFileURL(indexURL, allowingReadAccessTo: URL(fileURLWithPath: NSHomeDirectory()))

@@ -19,6 +19,12 @@ class PreviewPanel: NSPanel {
 }
 
 class DragHandleView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        if local.x > bounds.width - 48 { return nil }
+        return super.hitTest(point)
+    }
+
     override func mouseDown(with event: NSEvent) {
         window?.performDrag(with: event)
     }

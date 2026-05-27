@@ -63,8 +63,8 @@ describe("tab management", () => {
       // A single tab should not create duplicate DOM entries.
       // With 1 tab the tab bar is hidden, so 1 .tab element exists but bar is display:none.
       expect(tabElements.length).toBe(1);
-      // renderFile called twice: once for initial open, once for switch
       expect(mockRenderFile).toHaveBeenCalledTimes(2);
+      expect(document.getElementById("title")!.textContent).toBe("main.ts");
     });
 
     it("updates line range when switching to existing tab", async () => {
@@ -90,6 +90,18 @@ describe("tab management", () => {
       };
       expect(secondCall.startLine).toBe(50);
       expect(secondCall.endLine).toBe(60);
+    });
+
+    it("removes tab and shows error in title when renderFile rejects", async () => {
+      await importMain();
+      const handleFileRequest = (window as any).handleFileRequest;
+
+      mockRenderFile.mockRejectedValueOnce(new Error("ENOENT"));
+      await handleFileRequest({ path: "/proj/missing.ts" });
+
+      const tabBar = document.getElementById("tab-bar")!;
+      expect(tabBar.querySelectorAll(".tab").length).toBe(0);
+      expect(document.getElementById("title")!.textContent).toContain("Error");
     });
   });
 
@@ -179,6 +191,23 @@ describe("tab management", () => {
       await vi.waitFor(() => {
         expect(document.getElementById("title")!.textContent).toBe("a.ts");
       });
+    });
+
+    it("leaves active tab unchanged when closing a non-active tab", async () => {
+      await importMain();
+      const handleFileRequest = (window as any).handleFileRequest;
+
+      await handleFileRequest({ path: "/proj/a.ts" });
+      await handleFileRequest({ path: "/proj/b.ts" });
+
+      // b.ts is active. Close a.ts (the non-active tab, first .tab-close).
+      const closeBtns = document.querySelectorAll(".tab-close");
+      (closeBtns[0] as HTMLElement).click();
+
+      await vi.waitFor(() => {
+        expect(document.querySelectorAll(".tab").length).toBe(1);
+      });
+      expect(document.getElementById("title")!.textContent).toBe("b.ts");
     });
   });
 

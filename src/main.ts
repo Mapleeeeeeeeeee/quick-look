@@ -1,6 +1,6 @@
 import "./styles/main.css";
 import type { FileRequest } from "./types";
-import { renderFile, resetRenderer } from "./renderer";
+import { renderFile, resetRenderer, getCurrentFileType } from "./renderer";
 
 interface Tab {
   id: string;
@@ -177,8 +177,17 @@ function cycleTab(): void {
   void switchTab(tabs[nextIndex]!.id);
 }
 
+async function triggerSearch(): Promise<void> {
+  const fileType = getCurrentFileType();
+  if (fileType === "code") {
+    const { triggerFind } = await import("./renderers/code-renderer");
+    triggerFind();
+  }
+}
+
 (window as any).handleFileRequest = handleFileRequest;
 (window as any).cycleTab = cycleTab;
+(window as any).triggerSearch = triggerSearch;
 
 setupTabBarDelegation();
 

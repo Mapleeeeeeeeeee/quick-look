@@ -19,6 +19,10 @@ export function detectFileType(
 let currentRenderer: Renderer | null = null;
 let currentFileType: string | null = null;
 
+export function getCurrentFileType(): string | null {
+  return currentFileType;
+}
+
 export function resetRenderer(): void {
   if (currentRenderer) {
     currentRenderer.unmount();

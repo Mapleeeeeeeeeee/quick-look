@@ -108,3 +108,7 @@ export const codeRenderer: Renderer = {
     }
   },
 };
+
+export function triggerFind(): void {
+  editor?.getAction("actions.find")?.run();
+}

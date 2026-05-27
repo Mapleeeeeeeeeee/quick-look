@@ -13,7 +13,10 @@ struct FileRequestPayload: Codable {
     let endLine: Int?
 }
 
-class PreviewPanel: NSPanel {}
+class PreviewPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
 
 // Parses CLI arguments into a (path, startLine, endLine) tuple.
 // Used by both AppDelegate and sendToExistingInstance so the logic lives in one place.
@@ -53,9 +56,38 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
     var webView: WKWebView!
     var pendingRequest: FileRequest?
     var webViewReady = false
+    var searchActive = false
+    var previousApp: NSRunningApplication?
+
+    func enterSearchMode() {
+        searchActive = true
+        previousApp = NSWorkspace.shared.frontmostApplication
+        NSApp.setActivationPolicy(.regular)
+        panel.styleMask.remove(.nonactivatingPanel)
+        panel.becomesKeyOnlyIfNeeded = false
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(webView)
+    }
+
+    func exitSearchMode() {
+        searchActive = false
+        panel.styleMask.insert(.nonactivatingPanel)
+        panel.becomesKeyOnlyIfNeeded = true
+        NSApp.setActivationPolicy(.accessory)
+        if let prev = previousApp {
+            prev.activate(options: .activateIgnoringOtherApps)
+            previousApp = nil
+        }
+    }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "close" {
+            exitSearchMode()
             panel.orderOut(nil)
         }
     }
@@ -128,16 +160,38 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
                     return Unmanaged.passRetained(event)
                 }
 
-                if keycode == 50 {
-                    DispatchQueue.main.async {
-                        delegate.panel.orderOut(nil)
+                if delegate.searchActive {
+                    if keycode == 53 {
+                        DispatchQueue.main.async { delegate.exitSearchMode() }
+                        return Unmanaged.passRetained(event)
                     }
+                    if keycode == 50 {
+                        DispatchQueue.main.async {
+                            delegate.exitSearchMode()
+                            delegate.panel.orderOut(nil)
+                        }
+                        return nil
+                    }
+                    return Unmanaged.passRetained(event)
+                }
+
+                if keycode == 50 {
+                    DispatchQueue.main.async { delegate.panel.orderOut(nil) }
                     return nil
                 }
 
                 if keycode == 48 {
                     DispatchQueue.main.async {
                         delegate.webView.evaluateJavaScript("window.cycleTab && window.cycleTab()") { _, _ in }
+                    }
+                    return nil
+                }
+
+                let flags = event.flags
+                if keycode == 3 && flags.contains(.maskCommand) {
+                    DispatchQueue.main.async {
+                        delegate.enterSearchMode()
+                        delegate.webView.evaluateJavaScript("window.triggerSearch && window.triggerSearch()") { _, _ in }
                     }
                     return nil
                 }

@@ -21,6 +21,7 @@ class PreviewPanel: NSPanel {
 class DragHandleView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
+        // 48px = 24px close button + 12px header padding + 12px comfort margin
         if local.x > bounds.width - 48 { return nil }
         return super.hitTest(point)
     }

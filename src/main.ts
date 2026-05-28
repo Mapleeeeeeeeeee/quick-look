@@ -148,8 +148,6 @@ async function handleFileRequest(request: FileRequest): Promise<void> {
   // If a tab with the same path is already open, update its line range and switch to it
   const existing = tabs.find((t) => t.path === request.path);
   if (existing) {
-    existing.startLine = request.startLine;
-    existing.endLine = request.endLine;
     await switchTab(existing.id, {
       startLine: request.startLine,
       endLine: request.endLine,

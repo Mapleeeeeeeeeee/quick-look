@@ -51,9 +51,14 @@ vi.mock("monaco-editor", () => {
       }),
       createModel: vi.fn((content: string, lang: string) => {
         let disposed = false;
+        let currentContent = content;
         return {
           content,
           lang,
+          getValue: vi.fn(() => currentContent),
+          setValue: vi.fn((c: string) => {
+            currentContent = c;
+          }),
           dispose: vi.fn(() => {
             disposed = true;
           }),
@@ -173,13 +178,12 @@ describe("codeRenderer lifecycle", () => {
     expect(createdEditors[0].setScrollTop).toHaveBeenCalled();
   });
 
-  it("does not apply decorations or restore view state on fresh mount without startLine", async () => {
-    // Use a unique path to avoid viewStates leaking from prior tests
+  it("clears old decorations but does not restore view state on fresh mount without startLine", async () => {
     await codeRenderer.mount(container, {
       path: "/proj/fresh-no-startline.ts",
     });
 
-    expect(createdEditors[0].deltaDecorations).not.toHaveBeenCalled();
+    expect(createdEditors[0].deltaDecorations).toHaveBeenCalledWith([], []);
     expect(createdEditors[0].setScrollTop).not.toHaveBeenCalled();
     expect(createdEditors[0].restoreViewState).not.toHaveBeenCalled();
   });
@@ -276,7 +280,6 @@ describe("view state preservation", () => {
 
     const calls = (monacoEditor.createModel as ReturnType<typeof vi.fn>).mock
       .results;
-    // Collect all model objects created during these two mounts
     const models = calls.slice(-2).map((r: { value: unknown }) => r.value) as {
       dispose: ReturnType<typeof vi.fn>;
       isDisposed: ReturnType<typeof vi.fn>;
@@ -287,6 +290,72 @@ describe("view state preservation", () => {
     for (const model of models) {
       expect(model.dispose).toHaveBeenCalled();
     }
+  });
+
+  it("clears viewStates on unmount so stale scroll positions are not restored after remount", async () => {
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+    await codeRenderer.mount(container, { path: "/proj/b.ts" });
+    codeRenderer.unmount();
+
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+
+    expect(createdEditors[1].restoreViewState).not.toHaveBeenCalled();
+  });
+
+  it("saves view state during unmount to preserve last-viewed scroll position", async () => {
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+    const editor = createdEditors[0];
+    editor.saveViewState.mockClear();
+
+    codeRenderer.unmount();
+
+    expect(editor.saveViewState).toHaveBeenCalledTimes(1);
+  });
+
+  it("updates cached model content when file changes on disk between tab switches", async () => {
+    const { editor: monacoEditor } = await import("monaco-editor");
+    const createModelMock = monacoEditor.createModel as ReturnType<
+      typeof vi.fn
+    >;
+
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+    const results = createModelMock.mock.results;
+    const modelA = results[results.length - 1]!.value as {
+      setValue: ReturnType<typeof vi.fn>;
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      text: () => Promise.resolve("updated content"),
+    });
+    await codeRenderer.mount(container, { path: "/proj/b.ts" });
+
+    mockFetch.mockResolvedValueOnce({
+      text: () => Promise.resolve("updated content"),
+    });
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+
+    expect(modelA.setValue).toHaveBeenCalledWith("updated content");
+  });
+
+  it("clears old decorations when switching to a file without startLine", async () => {
+    const editor = makeEditor();
+    editor.deltaDecorations.mockReturnValue(["deco-1"]);
+    createdEditors.push(editor);
+    const { editor: monacoEditor } = await import("monaco-editor");
+    (monacoEditor.create as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      editor,
+    );
+
+    await codeRenderer.mount(container, {
+      path: "/proj/deco-a.ts",
+      startLine: 10,
+      endLine: 20,
+    });
+    editor.deltaDecorations.mockClear();
+
+    await codeRenderer.mount(container, { path: "/proj/deco-b.ts" });
+
+    expect(editor.deltaDecorations).toHaveBeenCalledWith(["deco-1"], []);
   });
 });
 

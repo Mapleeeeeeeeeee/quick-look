@@ -51,8 +51,16 @@ export function detectLanguage(filePath: string): string {
 
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
 let currentPath: string | null = null;
+let currentDecorations: string[] = [];
 const cachedModels = new Map<string, monaco.editor.ITextModel>();
 const viewStates = new Map<string, monaco.editor.ICodeEditorViewState>();
+
+function saveCurrentViewState(): void {
+  if (editor && currentPath) {
+    const state = editor.saveViewState();
+    if (state) viewStates.set(currentPath, state);
+  }
+}
 
 function getOrCreateModel(
   content: string,
@@ -60,7 +68,12 @@ function getOrCreateModel(
   filePath: string,
 ): monaco.editor.ITextModel {
   const existing = cachedModels.get(filePath);
-  if (existing && !existing.isDisposed()) return existing;
+  if (existing && !existing.isDisposed()) {
+    if (existing.getValue() !== content) {
+      existing.setValue(content);
+    }
+    return existing;
+  }
   const model = monaco.editor.createModel(content, language);
   cachedModels.set(filePath, model);
   return model;
@@ -68,10 +81,7 @@ function getOrCreateModel(
 
 export const codeRenderer: Renderer = {
   async mount(container: HTMLElement, req: FileRequest): Promise<void> {
-    if (editor && currentPath) {
-      const state = editor.saveViewState();
-      if (state) viewStates.set(currentPath, state);
-    }
+    saveCurrentViewState();
 
     const response = await fetch(`file://${req.path}`);
     const content = await response.text();
@@ -104,20 +114,18 @@ export const codeRenderer: Renderer = {
 
     if (req.startLine !== undefined) {
       const endLine = req.endLine ?? req.startLine;
-      editor.deltaDecorations(
-        [],
-        [
-          {
-            range: new monaco.Range(req.startLine, 1, endLine, 1),
-            options: {
-              isWholeLine: true,
-              className: "line-highlight",
-            },
+      currentDecorations = editor.deltaDecorations(currentDecorations, [
+        {
+          range: new monaco.Range(req.startLine, 1, endLine, 1),
+          options: {
+            isWholeLine: true,
+            className: "line-highlight",
           },
-        ],
-      );
+        },
+      ]);
       editor.setScrollTop(editor.getTopForLineNumber(req.startLine));
     } else {
+      currentDecorations = editor.deltaDecorations(currentDecorations, []);
       const savedState = viewStates.get(req.path);
       if (savedState) {
         editor.restoreViewState(savedState);
@@ -126,10 +134,7 @@ export const codeRenderer: Renderer = {
   },
 
   unmount(): void {
-    if (editor && currentPath) {
-      const state = editor.saveViewState();
-      if (state) viewStates.set(currentPath, state);
-    }
+    saveCurrentViewState();
     if (editor) {
       editor.dispose();
       editor = null;
@@ -138,6 +143,8 @@ export const codeRenderer: Renderer = {
       if (!model.isDisposed()) model.dispose();
     }
     cachedModels.clear();
+    viewStates.clear();
+    currentDecorations = [];
     currentPath = null;
   },
 };

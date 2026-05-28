@@ -7,6 +7,8 @@ type FakeEditor = {
   deltaDecorations: ReturnType<typeof vi.fn>;
   getTopForLineNumber: ReturnType<typeof vi.fn>;
   setScrollTop: ReturnType<typeof vi.fn>;
+  saveViewState: ReturnType<typeof vi.fn>;
+  restoreViewState: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
   getAction: ReturnType<typeof vi.fn>;
   isDisposed: boolean;
@@ -24,6 +26,11 @@ const makeEditor = (): FakeEditor => {
     deltaDecorations: vi.fn(),
     getTopForLineNumber: vi.fn().mockReturnValue(0),
     setScrollTop: vi.fn(),
+    saveViewState: vi.fn().mockReturnValue({
+      cursorState: [],
+      viewState: { scrollTop: 42 },
+    }),
+    restoreViewState: vi.fn(),
     dispose: vi.fn(),
     getAction: vi.fn().mockReturnValue({ run: vi.fn() }),
     isDisposed: false,
@@ -42,11 +49,17 @@ vi.mock("monaco-editor", () => {
         createdEditors.push(editor);
         return editor;
       }),
-      createModel: vi.fn((content: string, lang: string) => ({
-        content,
-        lang,
-        dispose: vi.fn(),
-      })),
+      createModel: vi.fn((content: string, lang: string) => {
+        let disposed = false;
+        return {
+          content,
+          lang,
+          dispose: vi.fn(() => {
+            disposed = true;
+          }),
+          isDisposed: vi.fn(() => disposed),
+        };
+      }),
     },
     Range: vi.fn().mockImplementation(function (
       this: unknown,
@@ -160,17 +173,120 @@ describe("codeRenderer lifecycle", () => {
     expect(createdEditors[0].setScrollTop).toHaveBeenCalled();
   });
 
-  it("does not apply decorations when no startLine is provided", async () => {
-    await codeRenderer.mount(container, { path: "/proj/main.ts" });
+  it("does not apply decorations or restore view state on fresh mount without startLine", async () => {
+    // Use a unique path to avoid viewStates leaking from prior tests
+    await codeRenderer.mount(container, {
+      path: "/proj/fresh-no-startline.ts",
+    });
 
     expect(createdEditors[0].deltaDecorations).not.toHaveBeenCalled();
     expect(createdEditors[0].setScrollTop).not.toHaveBeenCalled();
+    expect(createdEditors[0].restoreViewState).not.toHaveBeenCalled();
   });
 
   it("reads file content via fetch with file:// URL", async () => {
     await codeRenderer.mount(container, { path: "/proj/main.ts" });
 
     expect(mockFetch).toHaveBeenCalledWith("file:///proj/main.ts");
+  });
+});
+
+describe("view state preservation", () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    createdEditors.length = 0;
+    mockFetch.mockClear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    codeRenderer.unmount();
+  });
+
+  afterEach(() => {
+    codeRenderer.unmount();
+    document.body.removeChild(container);
+  });
+
+  it("saves view state before switching to a different file", async () => {
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+    const editor = createdEditors[0];
+    editor.saveViewState.mockClear();
+
+    await codeRenderer.mount(container, { path: "/proj/b.ts" });
+
+    expect(editor.saveViewState).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores saved view state when switching back to a previously viewed file without startLine", async () => {
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+    const editor = createdEditors[0];
+    const expectedState = { cursorState: [], viewState: { scrollTop: 42 } };
+
+    await codeRenderer.mount(container, { path: "/proj/b.ts" });
+    editor.restoreViewState.mockClear();
+
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+
+    expect(editor.restoreViewState).toHaveBeenCalledWith(expectedState);
+  });
+
+  it("does not restore view state when startLine is provided", async () => {
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+    const editor = createdEditors[0];
+
+    await codeRenderer.mount(container, { path: "/proj/b.ts" });
+    editor.restoreViewState.mockClear();
+    editor.deltaDecorations.mockClear();
+    editor.setScrollTop.mockClear();
+
+    await codeRenderer.mount(container, { path: "/proj/a.ts", startLine: 10 });
+
+    expect(editor.restoreViewState).not.toHaveBeenCalled();
+    expect(editor.deltaDecorations).toHaveBeenCalled();
+    expect(editor.setScrollTop).toHaveBeenCalled();
+  });
+
+  it("reuses cached model for the same file path instead of creating a new one", async () => {
+    const { editor: monacoEditor } = await import("monaco-editor");
+    const createModelMock = monacoEditor.createModel as ReturnType<
+      typeof vi.fn
+    >;
+    const callsBefore = createModelMock.mock.results.length;
+
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+    // Grab the model object returned by createModel for a.ts
+    const firstModel = createModelMock.mock.results[callsBefore].value;
+
+    await codeRenderer.mount(container, { path: "/proj/b.ts" });
+    const createModelCallCount = createModelMock.mock.calls.length;
+
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+
+    // createModel should NOT have been called again for a.ts
+    expect(createModelMock.mock.calls.length).toBe(createModelCallCount);
+    // The editor should receive the same model object from the first mount
+    expect(createdEditors[0].setModel).toHaveBeenLastCalledWith(firstModel);
+  });
+
+  it("disposes all cached models on unmount", async () => {
+    const { editor: monacoEditor } = await import("monaco-editor");
+
+    await codeRenderer.mount(container, { path: "/proj/a.ts" });
+    await codeRenderer.mount(container, { path: "/proj/b.ts" });
+
+    const calls = (monacoEditor.createModel as ReturnType<typeof vi.fn>).mock
+      .results;
+    // Collect all model objects created during these two mounts
+    const models = calls.slice(-2).map((r: { value: unknown }) => r.value) as {
+      dispose: ReturnType<typeof vi.fn>;
+      isDisposed: ReturnType<typeof vi.fn>;
+    }[];
+
+    codeRenderer.unmount();
+
+    for (const model of models) {
+      expect(model.dispose).toHaveBeenCalled();
+    }
   });
 });
 

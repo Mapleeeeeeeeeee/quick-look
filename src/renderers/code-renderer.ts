@@ -50,22 +50,41 @@ export function detectLanguage(filePath: string): string {
 }
 
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
+let currentPath: string | null = null;
+const cachedModels = new Map<string, monaco.editor.ITextModel>();
+const viewStates = new Map<string, monaco.editor.ICodeEditorViewState>();
+
+function getOrCreateModel(
+  content: string,
+  language: string,
+  filePath: string,
+): monaco.editor.ITextModel {
+  const existing = cachedModels.get(filePath);
+  if (existing && !existing.isDisposed()) return existing;
+  const model = monaco.editor.createModel(content, language);
+  cachedModels.set(filePath, model);
+  return model;
+}
 
 export const codeRenderer: Renderer = {
   async mount(container: HTMLElement, req: FileRequest): Promise<void> {
+    if (editor && currentPath) {
+      const state = editor.saveViewState();
+      if (state) viewStates.set(currentPath, state);
+    }
+
     const response = await fetch(`file://${req.path}`);
     const content = await response.text();
     const language = detectLanguage(req.path);
+    const model = getOrCreateModel(content, language, req.path);
+
+    currentPath = req.path;
 
     if (editor) {
-      const model = monaco.editor.createModel(content, language);
-      const oldModel = editor.getModel();
       editor.setModel(model);
-      oldModel?.dispose();
     } else {
       editor = monaco.editor.create(container, {
-        value: content,
-        language,
+        model,
         theme: "vs-dark",
         readOnly: true,
         minimap: { enabled: false },
@@ -98,14 +117,28 @@ export const codeRenderer: Renderer = {
         ],
       );
       editor.setScrollTop(editor.getTopForLineNumber(req.startLine));
+    } else {
+      const savedState = viewStates.get(req.path);
+      if (savedState) {
+        editor.restoreViewState(savedState);
+      }
     }
   },
 
   unmount(): void {
+    if (editor && currentPath) {
+      const state = editor.saveViewState();
+      if (state) viewStates.set(currentPath, state);
+    }
     if (editor) {
       editor.dispose();
       editor = null;
     }
+    for (const model of cachedModels.values()) {
+      if (!model.isDisposed()) model.dispose();
+    }
+    cachedModels.clear();
+    currentPath = null;
   },
 };
 

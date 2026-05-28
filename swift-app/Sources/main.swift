@@ -161,7 +161,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
         panel.contentView = containerView
 
         if let indexURL = findDistPath() {
-            webView.loadFileURL(indexURL, allowingReadAccessTo: URL(fileURLWithPath: NSHomeDirectory()))
+            webView.loadFileURL(indexURL, allowingReadAccessTo: URL(fileURLWithPath: "/"))
         }
 
         setupEscTap()

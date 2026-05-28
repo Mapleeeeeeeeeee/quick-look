@@ -86,7 +86,10 @@ function renderTabBar(): void {
   updateContentHeight();
 }
 
-async function switchTab(tabId: string): Promise<void> {
+async function switchTab(
+  tabId: string,
+  lineOverride?: { startLine?: number; endLine?: number },
+): Promise<void> {
   const tab = tabs.find((t) => t.id === tabId);
   if (!tab) return;
 
@@ -94,8 +97,12 @@ async function switchTab(tabId: string): Promise<void> {
   renderTabBar();
   updateTitle(tab.path);
 
+  const req: FileRequest = lineOverride
+    ? { path: tab.path, ...lineOverride }
+    : { path: tab.path };
+
   try {
-    await renderFile(tab);
+    await renderFile(req);
   } catch (err) {
     closeTab(tabId);
     const titleEl = document.getElementById("title");
@@ -143,7 +150,10 @@ async function handleFileRequest(request: FileRequest): Promise<void> {
   if (existing) {
     existing.startLine = request.startLine;
     existing.endLine = request.endLine;
-    await switchTab(existing.id);
+    await switchTab(existing.id, {
+      startLine: request.startLine,
+      endLine: request.endLine,
+    });
     return;
   }
 

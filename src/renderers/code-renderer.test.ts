@@ -14,10 +14,6 @@ type FakeEditor = {
   isDisposed: boolean;
 };
 
-const { colorizeElementMock } = vi.hoisted(() => ({
-  colorizeElementMock: vi.fn().mockResolvedValue(undefined),
-}));
-
 const createdEditors: FakeEditor[] = [];
 
 const makeEditor = (): FakeEditor => {
@@ -69,7 +65,6 @@ vi.mock("monaco-editor", () => {
           isDisposed: vi.fn(() => disposed),
         };
       }),
-      colorizeElement: colorizeElementMock,
     },
     Range: vi.fn().mockImplementation(function (
       this: unknown,
@@ -89,12 +84,7 @@ const mockFetch = vi.fn().mockResolvedValue({
 
 vi.stubGlobal("fetch", mockFetch);
 
-import {
-  createColorizedCodeBlock,
-  detectLanguage,
-  codeRenderer,
-  triggerFind,
-} from "./code-renderer";
+import { detectLanguage, codeRenderer, triggerFind } from "./code-renderer";
 
 describe("detectLanguage", () => {
   it.each([
@@ -126,28 +116,6 @@ describe("detectLanguage", () => {
     ["plaintext", "Makefile"],
   ])("returns %s language when given %s", (expected, filename) => {
     expect(detectLanguage(`/path/to/${filename}`)).toBe(expected);
-  });
-});
-
-describe("createColorizedCodeBlock", () => {
-  beforeEach(() => {
-    colorizeElementMock.mockClear();
-  });
-
-  it("test_given_yaml_content_when_creating_colorized_block_then_uses_monaco_colorize_element", async () => {
-    const block = await createColorizedCodeBlock(
-      "/proj/config.yaml",
-      "name: quick-look\nenabled: true",
-    );
-
-    expect(block.className).toBe("md-code-preview");
-
-    const codeElement = block.querySelector("code");
-    expect(codeElement?.getAttribute("data-lang")).toBe("yaml");
-    expect(codeElement?.textContent).toBe("name: quick-look\nenabled: true");
-    expect(colorizeElementMock).toHaveBeenCalledWith(codeElement, {
-      theme: "vs-dark",
-    });
   });
 });
 

@@ -2,9 +2,9 @@ import "../styles/markdown.css";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import type { FileRequest, Renderer } from "../types";
-import { createColorizedCodeBlock } from "./code-renderer";
 
 const YAML_EXTENSIONS = new Set([".yaml", ".yml"]);
+const YAML_CODE_FENCE = "```";
 
 let container: HTMLElement | null = null;
 
@@ -13,21 +13,12 @@ function isYamlFile(filePath: string): boolean {
   return YAML_EXTENSIONS.has(ext);
 }
 
-async function createRenderedContent(
-  req: FileRequest,
-  content: string,
-): Promise<HTMLElement> {
-  const rendered = document.createElement("div");
-  rendered.className = "md-rendered";
-
+function getRenderedSource(req: FileRequest, content: string): string {
   if (isYamlFile(req.path)) {
-    rendered.appendChild(await createColorizedCodeBlock(req.path, content));
-    return rendered;
+    return `${YAML_CODE_FENCE}yaml\n${content}\n${YAML_CODE_FENCE}`;
   }
 
-  const rawHtml = marked.parse(content) as string;
-  rendered.innerHTML = DOMPurify.sanitize(rawHtml);
-  return rendered;
+  return content;
 }
 
 export const markdownRenderer: Renderer = {
@@ -36,7 +27,8 @@ export const markdownRenderer: Renderer = {
 
     const response = await fetch(`file://${req.path}`);
     const content = await response.text();
-    const rendered = await createRenderedContent(req, content);
+    const rawHtml = marked.parse(getRenderedSource(req, content)) as string;
+    const safeHtml = DOMPurify.sanitize(rawHtml);
 
     const toolbar = document.createElement("div");
     toolbar.className = "md-toolbar";
@@ -47,23 +39,26 @@ export const markdownRenderer: Renderer = {
     toggle.textContent = "Raw";
     toolbar.appendChild(toggle);
 
+    const rendered = document.createElement("div");
+    rendered.className = "md-rendered";
+    rendered.innerHTML = safeHtml;
+
     const raw = document.createElement("pre");
     raw.className = "md-raw";
     raw.style.display = "none";
     raw.textContent = content;
 
     toggle.addEventListener("click", () => {
-      const isShowingRendered = raw.style.display === "none";
-      if (isShowingRendered) {
+      const showingRendered = raw.style.display === "none";
+      if (showingRendered) {
         rendered.style.display = "none";
         raw.style.display = "";
         toggle.textContent = "Preview";
-        return;
+      } else {
+        raw.style.display = "none";
+        rendered.style.display = "";
+        toggle.textContent = "Raw";
       }
-
-      raw.style.display = "none";
-      rendered.style.display = "";
-      toggle.textContent = "Raw";
     });
 
     container.innerHTML = "";

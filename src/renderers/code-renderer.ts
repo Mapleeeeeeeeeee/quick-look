@@ -44,30 +44,9 @@ const LANGUAGE_MAP: Record<string, string> = {
   ".svelte": "html",
 };
 
-export const MONACO_THEME = "vs-dark";
-
 export function detectLanguage(filePath: string): string {
   const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase();
   return LANGUAGE_MAP[ext] ?? "plaintext";
-}
-
-export async function createColorizedCodeBlock(
-  filePath: string,
-  content: string,
-): Promise<HTMLElement> {
-  const language = detectLanguage(filePath);
-  const pre = document.createElement("pre");
-  pre.className = "md-code-preview";
-
-  const code = document.createElement("code");
-  code.className = "md-code-preview__content";
-  code.setAttribute("data-lang", language);
-  code.textContent = content;
-
-  pre.appendChild(code);
-  await monaco.editor.colorizeElement(code, { theme: MONACO_THEME });
-
-  return pre;
 }
 
 let editor: monaco.editor.IStandaloneCodeEditor | null = null;
@@ -116,7 +95,7 @@ export const codeRenderer: Renderer = {
     } else {
       editor = monaco.editor.create(container, {
         model,
-        theme: MONACO_THEME,
+        theme: "vs-dark",
         readOnly: true,
         minimap: { enabled: false },
         scrollBeyondLastLine: false,

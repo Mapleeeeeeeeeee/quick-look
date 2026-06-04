@@ -4,6 +4,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+vi.mock("./code-renderer", () => ({
+  createColorizedCodeBlock: vi.fn(async (_filePath: string, content: string) => {
+    const pre = document.createElement("pre");
+    pre.className = "md-code-preview";
+
+    const code = document.createElement("code");
+    code.className = "md-code-preview__content";
+    code.setAttribute("data-lang", "yaml");
+    const span = document.createElement("span");
+    span.className = "mtk1";
+    span.textContent = content;
+    code.appendChild(span);
+    pre.appendChild(code);
+
+    return pre;
+  }),
+}));
+
 import { markdownRenderer } from "./markdown-renderer";
 
 describe("markdownRenderer", () => {

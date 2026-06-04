@@ -8,7 +8,7 @@ export function createShowFileTool() {
   return {
     name: "show_file",
     description:
-      "Open a floating preview panel on the user's screen. Multiple files open as tabs (keyboard Tab to cycle, backtick to close). Supports code (.ts/.js/.py/.rs/.go/etc with syntax highlighting), markdown (.md), yaml (.yaml/.yml), and images (.png/.jpg/.svg/.gif) with rendered HTML preview where supported.",
+      "Open a floating preview panel on the user's screen. Multiple files open as tabs (keyboard Tab to cycle, backtick to close). Supports code (.ts/.js/.py/.rs/.go/etc with syntax highlighting), markdown (.md rendered as HTML), and images (.png/.jpg/.svg/.gif).",
     parameters: z.object({
       path: z
         .string()

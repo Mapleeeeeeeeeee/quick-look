@@ -23,8 +23,6 @@ describe("detectFileType", () => {
   it.each([
     ["markdown", "README.md"],
     ["markdown", "doc.mdx"],
-    ["markdown", "config.yaml"],
-    ["markdown", "config.yml"],
     ["code", "main.ts"],
     ["code", "script.py"],
     ["code", "lib.rs"],

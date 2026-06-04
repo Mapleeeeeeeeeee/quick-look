@@ -2,7 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve, extname } from "node:path";
 import type { FileType, ValidationResult } from "./types.js";
 
-const MARKDOWN_EXTENSIONS = new Set([".md", ".mdx"]);
+const MARKDOWN_EXTENSIONS = new Set([".md", ".mdx", ".yaml", ".yml"]);
 
 const IMAGE_EXTENSIONS = new Set([
   ".png",
@@ -144,7 +144,10 @@ export async function validateFile(
   const fileType = detectFileType(absolutePath);
 
   if (fileType === "unsupported") {
-    return { valid: false, errorMessage: `Unsupported file type: ${extname(absolutePath)}` };
+    return {
+      valid: false,
+      errorMessage: `Unsupported file type: ${extname(absolutePath)}`,
+    };
   }
 
   let lineCount: number | undefined;

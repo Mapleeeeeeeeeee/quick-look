@@ -1,18 +1,25 @@
 import type { FileRequest, Renderer } from "./types";
 
+const RENDERED_TEXT_EXTENSIONS = new Set([".md", ".mdx", ".yaml", ".yml"]);
+const IMAGE_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".svg",
+  ".webp",
+  ".ico",
+  ".bmp",
+]);
+
 export type { FileRequest };
 
 export function detectFileType(
   filePath: string,
 ): "code" | "markdown" | "image" {
   const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase();
-  if (ext === ".md" || ext === ".mdx") return "markdown";
-  if (
-    [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".bmp"].includes(
-      ext,
-    )
-  )
-    return "image";
+  if (RENDERED_TEXT_EXTENSIONS.has(ext)) return "markdown";
+  if (IMAGE_EXTENSIONS.has(ext)) return "image";
   return "code";
 }
 

@@ -193,9 +193,17 @@ async function triggerSearch(): Promise<void> {
   }
 }
 
+function clearTabs(): void {
+  tabs = [];
+  activeTabId = null;
+  resetRenderer();
+  renderTabBar();
+}
+
 (window as any).handleFileRequest = handleFileRequest;
 (window as any).cycleTab = cycleTab;
 (window as any).triggerSearch = triggerSearch;
+(window as any).clearTabs = clearTabs;
 
 setupTabBarDelegation();
 

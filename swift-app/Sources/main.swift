@@ -32,7 +32,7 @@ class DragHandleView: NSView {
 }
 
 // Parses CLI arguments into a (path, startLine, endLine) tuple.
-// Used by both AppDelegate and sendToExistingInstance so the logic lives in one place.
+// Used by both AppDelegate and the socket IPC path so the logic lives in one place.
 func parseArguments(_ args: [String]) -> (path: String?, startLine: Int?, endLine: Int?) {
     var filePath: String?
     var startLine: Int?
@@ -71,6 +71,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
     var webViewReady = false
     var searchActive = false
     var previousApp: NSRunningApplication?
+    var socketSource: DispatchSourceRead?
+    var panelHidden = true
 
     func enterSearchMode() {
         searchActive = true
@@ -101,6 +103,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "close" {
             exitSearchMode()
+            panelHidden = true
             panel.orderOut(nil)
         }
     }
@@ -114,13 +117,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
         if let request = parseArgs(Array(args)) {
             showFile(request)
         }
-
-        DistributedNotificationCenter.default().addObserver(
-            self,
-            selector: #selector(handleNewFileRequest(_:)),
-            name: NSNotification.Name("com.quick-look.open-file"),
-            object: nil
-        )
     }
 
     func setupPanel() {
@@ -191,6 +187,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
                     if keycode == 50 {
                         DispatchQueue.main.async {
                             delegate.exitSearchMode()
+                            delegate.panelHidden = true
                             delegate.panel.orderOut(nil)
                         }
                         return nil
@@ -199,7 +196,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
                 }
 
                 if keycode == 50 {
-                    DispatchQueue.main.async { delegate.panel.orderOut(nil) }
+                    DispatchQueue.main.async {
+                        delegate.panelHidden = true
+                        delegate.panel.orderOut(nil)
+                    }
                     return nil
                 }
 
@@ -248,6 +248,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
     }
 
     func showFile(_ request: FileRequest) {
+        if panelHidden {
+            panelHidden = false
+            webView.evaluateJavaScript("window.clearTabs && window.clearTabs()") { _, _ in }
+        }
         panel.orderFrontRegardless()
         if webViewReady {
             injectFileRequest(request)
@@ -282,57 +286,166 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
     }
 
-    @objc func handleNewFileRequest(_ notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let filePath = userInfo["path"] as? String else { return }
-        let startLine = userInfo["startLine"] as? Int
-        let endLine = userInfo["endLine"] as? Int
-        showFile(FileRequest(path: filePath, startLine: startLine, endLine: endLine))
-    }
 }
 
-var lockFd: Int32 = -1
+// MARK: - Unix Domain Socket IPC
 
-func acquireLock() -> Bool {
-    let lockPath = "/tmp/quick-look.lock"
-    let fd = open(lockPath, O_CREAT | O_RDWR, 0o644)
-    guard fd >= 0 else { return false }
-    if flock(fd, LOCK_EX | LOCK_NB) == 0 {
-        lockFd = fd
-        return true
-    }
-    close(fd)
-    return false
-}
+let socketPath = "/tmp/quick-look.sock"
 
-func sendToExistingInstance(_ args: [String]) {
+/// Attempt to send a file request to an existing instance via the Unix domain socket.
+/// Returns true if an existing instance received the message (caller should exit).
+func sendToExistingInstance(_ args: [String]) -> Bool {
     let (path, startLine, endLine) = parseArguments(args)
-    guard let p = path else { return }
+    guard let p = path else { return false }
 
-    var userInfo: [String: Any] = ["path": p]
-    if let s = startLine { userInfo["startLine"] = s }
-    if let e = endLine { userInfo["endLine"] = e }
+    let payload = FileRequestPayload(path: p, startLine: startLine, endLine: endLine)
+    guard let jsonData = try? JSONEncoder().encode(payload) else { return false }
 
-    // Known limitation: if the first instance hasn't finished launching
-    // (observer not yet registered), this notification will be silently dropped.
-    // Acceptable for a local preview tool; for production reliability,
-    // consider file-based IPC with DispatchSourceFileSystemObject.
-    DistributedNotificationCenter.default().postNotificationName(
-        NSNotification.Name("com.quick-look.open-file"),
-        object: nil,
-        userInfo: userInfo,
-        deliverImmediately: true
-    )
+    let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+    guard fd >= 0 else { return false }
+    defer { close(fd) }
+
+    var addr = sockaddr_un()
+    addr.sun_family = sa_family_t(AF_UNIX)
+    _ = socketPath.withCString { src in
+        withUnsafeMutablePointer(to: &addr.sun_path) { pathPtr in
+            pathPtr.withMemoryRebound(to: CChar.self, capacity: MemoryLayout<sockaddr_un>.size) { dst in
+                strncpy(dst, src, 104 - 1)
+            }
+        }
+    }
+
+    let connectResult = withUnsafePointer(to: &addr) { ptr in
+        ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+            connect(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+        }
+    }
+
+    guard connectResult == 0 else { return false }
+
+    _ = jsonData.withUnsafeBytes { bufPtr in
+        write(fd, bufPtr.baseAddress!, bufPtr.count)
+    }
+    return true
 }
+
+/// Try to bind the socket. Returns the listening fd on success, or -1 if another instance holds it.
+func tryBindSocket() -> Int32 {
+    let serverFd = socket(AF_UNIX, SOCK_STREAM, 0)
+    guard serverFd >= 0 else { return -1 }
+
+    var addr = sockaddr_un()
+    addr.sun_family = sa_family_t(AF_UNIX)
+    _ = socketPath.withCString { src in
+        withUnsafeMutablePointer(to: &addr.sun_path) { pathPtr in
+            pathPtr.withMemoryRebound(to: CChar.self, capacity: MemoryLayout<sockaddr_un>.size) { dst in
+                strncpy(dst, src, 104 - 1)
+            }
+        }
+    }
+
+    let bindResult = withUnsafePointer(to: &addr) { ptr in
+        ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+            bind(serverFd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+        }
+    }
+
+    if bindResult == 0 {
+        if listen(serverFd, 5) == 0 { return serverFd }
+        close(serverFd)
+        unlink(socketPath)
+        return -1
+    }
+
+    // EADDRINUSE — socket file exists. Check if it's stale.
+    close(serverFd)
+    if sendToExistingInstance(ProcessInfo.processInfo.arguments) {
+        exit(0)
+    }
+
+    // Socket is stale (connect failed) — remove and retry bind
+    unlink(socketPath)
+    let retryFd = socket(AF_UNIX, SOCK_STREAM, 0)
+    guard retryFd >= 0 else { return -1 }
+
+    let retryBind = withUnsafePointer(to: &addr) { ptr in
+        ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
+            bind(retryFd, sockPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+        }
+    }
+
+    if retryBind == 0 {
+        if listen(retryFd, 5) == 0 { return retryFd }
+        close(retryFd)
+        unlink(socketPath)
+        return -1
+    }
+
+    close(retryFd)
+    return -1
+}
+
+/// Start listening on the given server fd for incoming file requests.
+func startSocketListener(serverFd: Int32, delegate: AppDelegate) {
+    let source = DispatchSource.makeReadSource(fileDescriptor: serverFd, queue: .main)
+    delegate.socketSource = source
+    source.setEventHandler {
+        let clientFd = accept(serverFd, nil, nil)
+        guard clientFd >= 0 else { return }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            while true {
+                let bytesRead = read(clientFd, &buffer, buffer.count)
+                if bytesRead <= 0 { break }
+                data.append(contentsOf: buffer[0..<bytesRead])
+            }
+            close(clientFd)
+
+            guard !data.isEmpty,
+                  let payload = try? JSONDecoder().decode(FileRequestPayload.self, from: data) else { return }
+
+            DispatchQueue.main.async {
+                delegate.showFile(FileRequest(path: payload.path, startLine: payload.startLine, endLine: payload.endLine))
+            }
+        }
+    }
+    source.setCancelHandler {
+        close(serverFd)
+        unlink(socketPath)
+    }
+    source.resume()
+
+    atexit { unlink(socketPath) }
+}
+
+// MARK: - Main Entry Point
 
 let args = ProcessInfo.processInfo.arguments
 
-if !acquireLock() {
-    sendToExistingInstance(Array(args))
+// Try to connect to an existing instance first
+if sendToExistingInstance(Array(args)) {
+    exit(0)
+}
+
+// No existing instance — try to become primary by binding the socket
+let serverFd = tryBindSocket()
+if serverFd < 0 {
+    // Lost the race — another instance bound between our connect and bind.
+    // Give it a moment to start listening, then retry.
+    usleep(100_000)
+    if sendToExistingInstance(Array(args)) {
+        exit(0)
+    }
+    // Give up gracefully — don't spawn a second UI
     exit(0)
 }
 
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
+
+startSocketListener(serverFd: serverFd, delegate: delegate)
+
 app.run()

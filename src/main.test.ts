@@ -211,6 +211,59 @@ describe("tab management", () => {
     });
   });
 
+  // Guards against: panel reopen showing stale tabs from previous session.
+  // When user closes the panel and a new file request arrives, old tabs
+  // must be cleared so only the newly requested file is shown.
+  describe("clearTabs", () => {
+    it("given multiple open tabs, when clearTabs is called, then all tabs are removed and renderer is reset", async () => {
+      await importMain();
+      const handleFileRequest = (window as any).handleFileRequest;
+      const clearTabs = (window as any).clearTabs;
+
+      await handleFileRequest({ path: "/proj/a.ts" });
+      await handleFileRequest({ path: "/proj/b.ts" });
+      await handleFileRequest({ path: "/proj/c.ts" });
+
+      mockResetRenderer.mockClear();
+      clearTabs();
+
+      const tabBar = document.getElementById("tab-bar")!;
+      expect(tabBar.querySelectorAll(".tab").length).toBe(0);
+      expect(tabBar.style.display).toBe("none");
+      expect(mockResetRenderer).toHaveBeenCalledTimes(1);
+    });
+
+    it("given no open tabs, when clearTabs is called, then renderer is reset without error", async () => {
+      await importMain();
+      const clearTabs = (window as any).clearTabs;
+
+      mockResetRenderer.mockClear();
+      clearTabs();
+
+      expect(mockResetRenderer).toHaveBeenCalledTimes(1);
+      const tabBar = document.getElementById("tab-bar")!;
+      expect(tabBar.querySelectorAll(".tab").length).toBe(0);
+      expect(tabBar.style.display).toBe("none");
+    });
+
+    it("given tabs were cleared, when a new file request arrives, then only the new file appears", async () => {
+      await importMain();
+      const handleFileRequest = (window as any).handleFileRequest;
+      const clearTabs = (window as any).clearTabs;
+
+      await handleFileRequest({ path: "/proj/old.ts" });
+      clearTabs();
+
+      mockRenderFile.mockClear();
+      await handleFileRequest({ path: "/proj/new.ts" });
+
+      expect(document.getElementById("title")!.textContent).toBe("new.ts");
+      expect(mockRenderFile).toHaveBeenCalledTimes(1);
+      const tabBar = document.getElementById("tab-bar")!;
+      expect(tabBar.querySelectorAll(".tab").length).toBe(1);
+    });
+  });
+
   describe("tab bar rendering", () => {
     it("hides tab bar when only one tab is open", async () => {
       await importMain();

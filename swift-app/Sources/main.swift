@@ -105,6 +105,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
             exitSearchMode()
             panelHidden = true
             panel.orderOut(nil)
+        } else if message.name == "openExternal", let urlString = message.body as? String,
+                  let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -138,6 +141,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         config.userContentController.add(self, name: "close")
+        config.userContentController.add(self, name: "openExternal")
 
         let contentRect = NSRect(x: 0, y: 0, width: 900, height: 650)
         webView = WKWebView(frame: contentRect, configuration: config)
@@ -278,6 +282,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
             pendingRequest = nil
             injectFileRequest(request)
         }
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+
+        // Allow file:// URLs (our local app) and about:blank
+        if url.scheme == "file" || url.scheme == "about" {
+            decisionHandler(.allow)
+            return
+        }
+
+        // External URL (http, https, etc.) — open in system browser, cancel WKWebView navigation
+        if url.scheme == "http" || url.scheme == "https" {
+            NSWorkspace.shared.open(url)
+        }
+        decisionHandler(.cancel)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

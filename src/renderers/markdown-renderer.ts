@@ -44,6 +44,23 @@ export const markdownRenderer: Renderer = {
       }
     });
 
+    // Intercept link clicks — open external URLs in system browser
+    rendered.addEventListener('click', (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest('a');
+      if (!anchor) return;
+
+      const href = anchor.getAttribute('href');
+      if (!href) return;
+
+      e.preventDefault();
+
+      if (href.startsWith('http://') || href.startsWith('https://')) {
+        // Send to Swift to open in system default browser
+        (window as any).webkit?.messageHandlers?.openExternal?.postMessage(href);
+      }
+      // Ignore other link types (anchors, relative paths, etc.)
+    });
+
     container.innerHTML = '';
     container.appendChild(toolbar);
     container.appendChild(rendered);

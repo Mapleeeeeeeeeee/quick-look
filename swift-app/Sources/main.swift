@@ -223,6 +223,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScri
                     return nil
                 }
 
+                if keycode == 8 && flags.contains(.maskCommand) {
+                    DispatchQueue.main.async {
+                        delegate.webView.evaluateJavaScript("window.getSelectedText ? window.getSelectedText() : ''") { result, _ in
+                            if let text = result as? String, !text.isEmpty {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(text, forType: .string)
+                            }
+                        }
+                    }
+                    return Unmanaged.passRetained(event)
+                }
+
                 return Unmanaged.passRetained(event)
             },
             userInfo: refcon

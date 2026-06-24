@@ -152,3 +152,12 @@ export const codeRenderer: Renderer = {
 export function triggerFind(): void {
   editor?.getAction("actions.find")?.run();
 }
+
+export function getSelectedText(): string {
+  if (!editor) return "";
+  const sel = editor.getSelection();
+  if (!sel) return "";
+  return editor.getModel()?.getValueInRange(sel) ?? "";
+}
+
+(window as any)._getCodeSelectedText = getSelectedText;

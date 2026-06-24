@@ -54,6 +54,7 @@ html, body {
   display: none;
   height: calc(100% - 32px);
   width: 100%;
+  user-select: text;
 }
 
 #content-container {
@@ -62,6 +63,7 @@ html, body {
   width: 100%;
   overflow: auto;
   padding: 16px;
+  user-select: text;
 }
 
 .line-highlight {

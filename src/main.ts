@@ -204,6 +204,14 @@ function clearTabs(): void {
 (window as any).cycleTab = cycleTab;
 (window as any).triggerSearch = triggerSearch;
 (window as any).clearTabs = clearTabs;
+(window as any).getSelectedText = (): string => {
+  const codeFn = (window as any)._getCodeSelectedText;
+  if (codeFn) {
+    const text = codeFn();
+    if (text) return text;
+  }
+  return window.getSelection()?.toString() ?? "";
+};
 
 setupTabBarDelegation();
 
